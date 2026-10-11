@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell and PHP syntax
+        run: |
+          bash -n roles/ispconfig_web/files/build-php53.sh tests/e2e/run.sh
+          php -l roles/ispconfig_server/files/autoinstall.php
+      - name: Autoinstaller values hook
+        run: php tests/autoinstall-values.php
+      - name: Playbook syntax
+        run: |
+          pipx install 'ansible-core>=2.15,<2.18'
+          ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check -i hosts.example site.yml

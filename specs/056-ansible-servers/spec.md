@@ -25,7 +25,7 @@ public ISPConfig autoinstaller; web servers need an FTP passive port range and P
 
 ## Decisions (owner-delegated)
 
-- Directory `ansible/` in this repository, roles `ispconfig_server` (shared), `ispconfig_panel`, `ispconfig_web`,
+- Directory `ansible/` of ispconfig-rest, since moved to this repository (ispconfig-ansible); roles `ispconfig_server` (shared), `ispconfig_panel`, `ispconfig_web`,
   `ispconfig_db`, `ispconfig_dns`; groups of the same names. A server may be in several groups: the autoinstaller runs
   once with the services of all its groups. Exactly one panel. Mail is not covered. Built-in Ansible modules only.
 - The autoinstaller is patched at one line so its generated ini goes through `files/autoinstall.php`, which applies
@@ -48,6 +48,6 @@ public ISPConfig autoinstaller; web servers need an FTP passive port range and P
   root on the servers from its address, host keys come through Ansible's connection, then
   `ispconfig-rest server-tools install` (database, web-logs, waf; file-manager with the WHMCS key; dns-catalog on DNS
   servers), repeated only when servers or components change.
-- `site.yml` imports `dns-catalog/ansible/secondary.yml` when `ispconfig_dns_secondaries` has hosts.
-- Tests: unit test of `autoinstall.php`; CI syntax checks; `tests/Integration/ansible/run.sh` runs the real
+- `site.yml` imports the DNS secondary playbook (now `dns-secondary/secondary.yml`) when `ispconfig_dns_secondaries` has hosts.
+- Tests: unit test of `autoinstall.php`; CI syntax checks; `tests/e2e/run.sh` runs the real
   autoinstaller on four systemd containers, websites on PHP 5.3 and 5.6 through the API, and a second run.

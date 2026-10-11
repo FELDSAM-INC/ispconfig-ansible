@@ -1,5 +1,5 @@
 # Copy to inventory.yml. Primaries: ISPConfig DNS servers with the dns-catalog server tool installed
-# (ispconfig-rest server-tools install --components dns-catalog). Secondaries: Debian/Ubuntu hosts with BIND 9.18+.
+# (ispconfig-rest dns-catalog:install). Secondaries: Debian/Ubuntu hosts with BIND 9.18+.
 all:
   children:
     ispconfig_dns_primaries:

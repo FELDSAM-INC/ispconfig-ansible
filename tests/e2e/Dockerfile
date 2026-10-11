@@ -1,4 +1,4 @@
-# Fresh Debian/Ubuntu server with systemd for the Ansible ISPConfig roles (tests/Integration/ansible/run.sh). Docker
+# Fresh Debian/Ubuntu server with systemd for the Ansible ISPConfig roles (tests/e2e/run.sh). Docker
 # images forbid packages to start services (policy-rc.d); a server does not.
 ARG BASE=ubuntu:24.04
 FROM ${BASE}

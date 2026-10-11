@@ -9,7 +9,7 @@ adds ispconfig-rest with its server tools on the panel. The groups you put a ser
 | `ispconfig_panel` | `ispconfig_panel` | ISPConfig master: the interface (port 8080) and the master database, plus ispconfig-rest (port 8090), which installs the server tools on the other servers. It hosts nothing for customers unless it is also in another group. |
 | `ispconfig_web` | `ispconfig_web` | nginx (or Apache), PHP-FPM with the chosen PHP versions, including PHP 5.3 built from source, Pure-FTPd with a passive port range, jailkit for SSH users, quota |
 | `ispconfig_db` | `ispconfig_db` | MariaDB for customer databases, reachable by the web servers |
-| `ispconfig_dns` | `ispconfig_dns` | BIND as primary DNS, with the [catalog zone](../dns-catalog/README.md) for secondaries |
+| `ispconfig_dns` | `ispconfig_dns` | BIND as primary DNS, with the [catalog zone](https://github.com/FELDSAM-INC/ispconfig-rest/blob/main/dns-catalog/README.md) for secondaries |
 
 Exactly one server is the panel. A server may be in several groups, for example web and database; the autoinstaller
 runs once with all its services. Mail is not covered.
@@ -59,7 +59,7 @@ defaults to the server's default IPv4 address. The playbook runs in this order:
 2. **Panel**: autoinstaller as a standalone master, then ispconfig-rest.
 3. **Servers**: all database, web and DNS servers in parallel (`ispconfig_serial: 1` installs them one by one).
    Each server joins the panel and is then visible in the ISPConfig interface.
-4. **Server tools**: the panel installs the [server tools](../server-tools/README.md) on the servers.
+4. **Server tools**: the panel installs the [server tools](https://github.com/FELDSAM-INC/ispconfig-rest/blob/main/server-tools/README.md) on the servers.
 5. **DNS secondaries**: optional, see [DNS](#dns).
 
 A run takes 20–60 minutes per server, mostly the autoinstaller. Running the playbook again changes nothing on
@@ -115,7 +115,7 @@ It becomes the default `php` where the system's PHP is older (Debian 12).
 
 ## The panel and ispconfig-rest
 
-ispconfig-rest is installed with its own [installer](../README.md#install-on-an-ispconfig-server-recommended) from
+ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended) from
 `ispconfig_rest_version` (`main` follows the releases; a tag pins one, 1.0.7 or newer: the installer of earlier
 releases stops on a new panel, which has no ISPConfig firewall record yet). An installed API is not touched again;
 update it with `ispconfig-rest update`. API keys are not created; mint one with `sudo ispconfig-rest key:create "WHMCS"`.
@@ -145,8 +145,8 @@ ispconfig_dns
 ns2.example.net
 ```
 
-`site.yml` then runs [`dns-catalog/ansible/secondary.yml`](../dns-catalog/ansible/secondary.yml) at the end. Its
-variables are described in the [DNS catalog guide](../dns-catalog/README.md#set-up-a-secondary-with-ansible).
+`site.yml` then runs [`dns-secondary/secondary.yml`](dns-secondary/secondary.yml) at the end; its variables are in
+[its guide](dns-secondary/README.md).
 
 ## Private network and databases
 
@@ -231,14 +231,24 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 ## Tests
 
 ```sh
-# From the repository root: panel, web, database and DNS servers in systemd containers (Docker)
-bash tests/Integration/ansible/run.sh
+php tests/autoinstall-values.php   # the autoinstaller values hook (files/autoinstall.php)
+bash tests/e2e/run.sh              # panel, web, database and DNS servers in systemd containers (Docker)
 ```
 
-The test runs the real autoinstaller, so it takes long and downloads a lot. It installs a panel and three servers
-joining it, builds PHP 5.3, and checks:
+The end-to-end test runs the real autoinstaller, so it takes long and downloads a lot. It installs a panel and three
+servers joining it, builds PHP 5.3, and checks:
 
 - the service flags and PHP versions in ISPConfig,
 - PHP 5.3 and a sury PHP version serving through PHP-FPM,
+- where MariaDB listens, and a database on the database server used by a website on the web server,
 - ispconfig-rest, the server tools and the catalog zone,
+- certificates through DNS challenges with the clients of [ispconfig-acme-dns](https://github.com/FELDSAM-INC/ispconfig-acme-dns)
+  (cloned for the test; `ACME_DNS_DIR` uses a local checkout),
 - that a second run changes nothing.
+
+`KEEP=1` keeps the containers, `REUSE=1` runs again on kept ones, `BASE=debian:12` tests another system. The test
+installs ispconfig-rest from its `develop` branch (`tests/e2e/vars.yml`).
+
+## License
+
+BSD-3-Clause

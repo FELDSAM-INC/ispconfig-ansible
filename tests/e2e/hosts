@@ -1,4 +1,4 @@
-# Inventory of tests/Integration/ansible/run.sh: systemd containers reached through the Docker socket.
+# Inventory of tests/e2e/run.sh: systemd containers reached through the Docker socket.
 [ispconfig_panel]
 panel.ispcp.test ansible_host=ispcp-ansible-panel ispconfig_address=10.231.80.10
 

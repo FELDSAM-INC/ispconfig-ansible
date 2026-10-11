@@ -5,7 +5,7 @@
 # internet access; takes 30-90 minutes. KEEP=1 keeps the containers, REUSE=1 runs again on kept ones; BASE=debian:12
 # tests another system.
 set -euo pipefail
-cd "$(dirname "$0")/../../.."
+cd "$(dirname "$0")/../.."
 BASE=${BASE:-ubuntu:24.04}
 NET=ispcp-ansible
 NODES=(panel web1 db1 ns1)
@@ -20,10 +20,10 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 on() { local node=$1; shift; docker exec "ispcp-ansible-$node" "$@"; }
 sql() { on panel mysql --defaults-file=/etc/mysql/debian.cnf --batch --skip-column-names dbispconfig -e "$1"; }
 
-docker build -q -t ispcp-dns-catalog-ansible -f tests/Integration/dns-catalog/controller.Dockerfile tests/Integration/dns-catalog >/dev/null
+docker build -q -t ispcp-ansible-controller -f tests/e2e/controller.Dockerfile tests/e2e >/dev/null
 [ "${KEEP:-0}" = 1 ] || [ "${REUSE:-0}" = 1 ] || trap cleanup EXIT
 if [ "${REUSE:-0}" != 1 ]; then
-    docker build -q -t ispcp-ansible-node --build-arg BASE="$BASE" tests/Integration/ansible >/dev/null
+    docker build -q -t ispcp-ansible-node --build-arg BASE="$BASE" tests/e2e >/dev/null
     cleanup
     docker network create --subnet 10.231.80.0/24 "$NET" >/dev/null
     for node in "${NODES[@]}"; do
@@ -39,9 +39,9 @@ done
 
 playbook() {
     docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(command -v docker):/usr/bin/docker:ro" \
-        -v "$PWD:/repo:ro" -w /repo/ansible \
-        -e ANSIBLE_CONFIG=/repo/ansible/ansible.cfg -e ANSIBLE_FORCE_COLOR=0 ispcp-dns-catalog-ansible \
-        ansible-playbook -i /repo/tests/Integration/ansible/hosts -e @/repo/tests/Integration/ansible/vars.yml site.yml
+        -v "$PWD:/repo:ro" -w /repo \
+        -e ANSIBLE_CONFIG=/repo/ansible.cfg -e ANSIBLE_FORCE_COLOR=0 ispcp-ansible-controller \
+        ansible-playbook -i /repo/tests/e2e/hosts -e @/repo/tests/e2e/vars.yml site.yml
 }
 
 echo "== First run (autoinstaller on four servers; logs in $LOGS)"
@@ -157,10 +157,13 @@ if [ -z "$zone" ]; then
 fi
 acme_key=$(on panel ispconfig-rest key:create e2e-acme --acme --zone acme.test | grep -oE 'isp_[A-Za-z0-9]+' | head -n 1)
 [ "$(on panel curl -sk -o /dev/null -w '%{http_code}' -H "X-API-Key: $acme_key" https://127.0.0.1:8090/api/v1/dns/soa)" = 403 ] || fail "the ACME key reaches other endpoints"
-docker build -q -t ispcp-acme-client -f tests/Integration/acme-dns/client.Dockerfile tests/Integration/acme-dns >/dev/null
+# The ACME clients come from ispconfig-acme-dns: a local checkout (ACME_DNS_DIR) or a fresh clone.
+acme_dns=${ACME_DNS_DIR:-$LOGS/ispconfig-acme-dns}
+[ -n "${ACME_DNS_DIR:-}" ] || git clone -q --depth 1 https://github.com/FELDSAM-INC/ispconfig-acme-dns "$acme_dns"
+docker build -q -t ispcp-acme-client -f "$acme_dns/tests/integration/client.Dockerfile" "$acme_dns/tests/integration" >/dev/null
 docker run -d --name ispcp-ansible-pebble --network "$NET" --network-alias pebble -e PEBBLE_VA_NOSLEEP=1 -e PEBBLE_WFE_NONCEREJECT=0 \
     ghcr.io/letsencrypt/pebble:2.7.0 -config /test/config/pebble-config.json -dnsserver 10.231.80.31:53 >/dev/null
-docker run -d --name ispcp-ansible-acme --network "$NET" -v "$PWD:/repo:ro" -e REQUESTS_CA_BUNDLE=/tmp/pebble.pem ispcp-acme-client sleep infinity >/dev/null
+docker run -d --name ispcp-ansible-acme --network "$NET" -v "$acme_dns:/acme-dns:ro" -e REQUESTS_CA_BUNDLE=/tmp/pebble.pem ispcp-acme-client sleep infinity >/dev/null
 acme() { docker exec ispcp-ansible-acme "$@"; }
 docker cp ispcp-ansible-pebble:/test/certs/pebble.minica.pem - | docker exec -i ispcp-ansible-acme tar -x -C /tmp
 # Clients verify ispconfig-rest's certificate. ISPConfig's self-signed fallback (no Let's Encrypt in containers) has no
@@ -170,8 +173,8 @@ on panel sh -c 'cd /usr/local/ispconfig/interface/ssl && openssl req -x509 -newk
     && systemctl reload nginx'
 on panel cat /usr/local/ispconfig/interface/ssl/ispserver.crt | docker exec -i ispcp-ansible-acme sh -c 'cat > /tmp/panel.pem'
 acme sh -c 'mv /tmp/pebble.minica.pem /tmp/pebble.pem && cat /tmp/pebble.pem /tmp/panel.pem > /tmp/both.pem
-    cp -r /repo/acme-dns/certbot /tmp/plugin && pip install --quiet --root-user-action=ignore --disable-pip-version-check --no-deps /tmp/plugin
-    cp /repo/acme-dns/acme.sh/dns_ispconfig_rest.sh /root/.acme.sh/dnsapi/'
+    cp -r /acme-dns/certbot /tmp/plugin && pip install --quiet --root-user-action=ignore --disable-pip-version-check --no-deps /tmp/plugin
+    cp /acme-dns/acme.sh/dns_ispconfig_rest.sh /root/.acme.sh/dnsapi/'
 for _ in $(seq 1 30); do acme dig +short @10.231.80.31 acme.test SOA | grep -q . && break; sleep 10; done
 acme dig +short @10.231.80.31 acme.test SOA | grep -q . || fail "ns1 does not serve acme.test"
 rest=https://panel.ispcp.test:8090
@@ -184,8 +187,8 @@ acme "${certbot[@]}" --authenticator dns-ispconfig-rest --dns-ispconfig-rest-cre
 echo "certbot plugin: $(acme openssl x509 -in /tmp/le/live/plugin/cert.pem -noout -ext subjectAltName | tail -n 1 | xargs) in $((SECONDS - started)) s"
 started=$SECONDS
 acme env ISPC_REST_URL=$rest ISPC_REST_KEY="$acme_key" ISPC_REST_CA_BUNDLE=/tmp/panel.pem ISPC_REST_PROPAGATION=0 "${certbot[@]}" --manual \
-    --preferred-challenges dns --manual-auth-hook '/repo/acme-dns/certbot-hook/ispconfig-rest-certbot-hook auth' \
-    --manual-cleanup-hook '/repo/acme-dns/certbot-hook/ispconfig-rest-certbot-hook cleanup' --cert-name hook -d hook.acme.test >/dev/null 2>&1 \
+    --preferred-challenges dns --manual-auth-hook '/acme-dns/certbot-hook/ispconfig-rest-certbot-hook auth' \
+    --manual-cleanup-hook '/acme-dns/certbot-hook/ispconfig-rest-certbot-hook cleanup' --cert-name hook -d hook.acme.test >/dev/null 2>&1 \
     || { acme grep -iE 'hook|error|detail' /tmp/le-logs/letsencrypt.log | tail -n 15; fail "certbot hook with ISPConfig"; }
 echo "certbot hook: $(acme openssl x509 -in /tmp/le/live/hook/cert.pem -noout -ext subjectAltName | tail -n 1 | xargs) in $((SECONDS - started)) s"
 started=$SECONDS

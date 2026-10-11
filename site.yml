@@ -75,6 +75,6 @@
 # Secondaries following the catalog zones of the DNS servers: list them in ispconfig_dns_secondaries and make
 # ispconfig_dns_primaries a child group of ispconfig_dns (see hosts.example). Skipped without such hosts.
 - name: DNS secondaries
-  ansible.builtin.import_playbook: ../dns-catalog/ansible/secondary.yml
+  ansible.builtin.import_playbook: dns-secondary/secondary.yml
   when: groups['ispconfig_dns_secondaries'] | default([]) | length > 0
   tags: secondaries

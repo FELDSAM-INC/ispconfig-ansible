@@ -1,5 +1,5 @@
 # BIND secondaries for the catalog zones of ISPConfig DNS servers (ispconfig-rest spec 055).
-# The primaries run the dns-catalog server tool; see ../README.md. Run with:
+# The primaries run the dns-catalog server tool of ispconfig-rest; see README.md. Run with:
 #   ansible-playbook -i inventory.yml secondary.yml
 - name: Prepare the secondaries
   hosts: ispconfig_dns_secondaries

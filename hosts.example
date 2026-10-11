@@ -14,7 +14,7 @@ db1.example.com ispconfig_address=10.0.0.21
 [ispconfig_dns]
 ns1.example.com ispconfig_address=10.0.0.31
 
-# Optional: BIND secondaries that follow the catalog zones of the DNS servers (dns-catalog/README.md).
+# Optional: BIND secondaries that follow the catalog zones of the DNS servers (dns-secondary/README.md).
 [ispconfig_dns_primaries:children]
 ispconfig_dns
 
