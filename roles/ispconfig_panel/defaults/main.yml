@@ -4,10 +4,14 @@ ispconfig_rest_install: true
 ispconfig_rest_version: main
 ispconfig_rest_repository: FELDSAM-INC/ispconfig-rest
 ispconfig_rest_port: 8090
+# Extensions of ispconfig-rest, each NAME or NAME@REF (a branch or a vX.Y.Z release; default main). hosting adds the
+# hosting features and the server tools below (https://github.com/FELDSAM-INC/ispconfig-rest-hosting).
+ispconfig_rest_extensions: [hosting]
 # Public URL of the API (default https://<panel FQDN>:<port>).
 ispconfig_rest_url: ""
 
-# Server tools installed from the panel over SSH (ispconfig-rest server-tools). file-manager is added when the
+# Server tools installed from the panel over SSH (ispconfig-rest server-tools, with the hosting extension).
+# file-manager is added when the
 # WHMCS public key is set, dns-catalog when ispconfig_rest_dns_catalog is true and there are DNS servers.
 ispconfig_rest_server_tools: [database, web-logs, waf]
 ispconfig_rest_dns_catalog: true

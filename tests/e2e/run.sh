@@ -87,6 +87,10 @@ if [ -z "$client" ]; then
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 fi
 group=$(sql "SELECT groupid FROM sys_group WHERE client_id = $client")
+# The hosting extension: loaded, its endpoints routed and its paths in the served contract.
+on panel ispconfig-rest extension:list | grep -E '^\| hosting +\| [0-9.]+ +\| yes' >/dev/null || fail "hosting extension not loaded"
+api "https://127.0.0.1:8090/api/v1/usage/resources?client_id=$client" >/dev/null || fail "hosting endpoint"
+on panel curl -fsSk https://127.0.0.1:8090/api/spec | grep -qF '/sites/web-domains/{id}/waf' || fail "hosting contract"
 for version in 5.3 5.6; do
     domain="php${version/./}.ispcp.test"
     [ -z "$(sql "SELECT domain_id FROM web_domain WHERE domain = '$domain'")" ] || continue

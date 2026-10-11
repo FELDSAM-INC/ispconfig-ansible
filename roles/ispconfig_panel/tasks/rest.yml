@@ -31,7 +31,8 @@
       no_log: true
 
     - name: Run the ispconfig-rest installer
-      ansible.builtin.command: bash /root/ispconfig-rest-install.sh
+      ansible.builtin.command:
+        argv: "{{ ['bash', '/root/ispconfig-rest-install.sh'] + ispconfig_rest_extensions | map('regex_replace', '^', '--extension ') | map('split', ' ') | flatten }}"
       environment:
         ISPC_REST_NONINTERACTIVE: "1"
         ISPC_REST_CREATE_KEY: "no"
@@ -55,6 +56,22 @@
       ansible.builtin.file:
         path: /root/ispconfig-rest-install.sh
         state: absent
+
+# Extensions added to the list later, also on an API installed before; installed ones are updated with
+# `ispconfig-rest update`.
+- name: Read the installed extensions
+  ansible.builtin.command: sed -n 's/^EXTENSIONS="\(.*\)"$/\1/p' /etc/ispconfig-rest/install.conf
+  register: ispconfig_rest_installed_extensions
+  changed_when: false
+
+- name: Install ispconfig-rest extensions
+  ansible.builtin.command:
+    argv: >-
+      {{ ['/usr/local/bin/ispconfig-rest', 'extension:install', item.split('@')[0]]
+         + ([] if '@' not in item else [('--tag' if item.split('@')[1] is match('^v[0-9]+[.][0-9]+[.][0-9]+') else '--branch'), item.split('@')[1]]) }}
+  loop: "{{ ispconfig_rest_extensions }}"
+  when: item.split('@')[0] not in ispconfig_rest_installed_extensions.stdout.split()
+  changed_when: true
 
 - name: Check ispconfig-rest
   ansible.builtin.command: /usr/local/bin/ispconfig-rest status

@@ -12,5 +12,6 @@ ispconfig_ssl_cert:
   country: CZ
   organisation: ispconfig-rest e2e
 ispconfig_rest_server_tools: [database, web-logs]
-# The branch under test (installer and server tool sources come from GitHub).
+# The branches under test (installer, extension and server tool sources come from GitHub).
 ispconfig_rest_version: develop
+ispconfig_rest_extensions: [hosting@develop]

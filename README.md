@@ -116,11 +116,16 @@ It becomes the default `php` where the system's PHP is older (Debian 12).
 ## The panel and ispconfig-rest
 
 ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended) from
-`ispconfig_rest_version` (`main` follows the releases; a tag pins one, 1.0.7 or newer: the installer of earlier
-releases stops on a new panel, which has no ISPConfig firewall record yet). An installed API is not touched again;
+`ispconfig_rest_version` (`main` follows the releases; a tag pins one, 1.1.0 or newer for extensions; earlier
+installers than 1.0.7 stop on a new panel, which has no ISPConfig firewall record yet). An installed API is not touched again;
 update it with `ispconfig-rest update`. API keys are not created; mint one with `sudo ispconfig-rest key:create "WHMCS"`.
 
-The panel's root gets its own SSH key (`/root/.ssh/ispconfig-tools`). Its public key is authorized for root on each
+`ispconfig_rest_extensions` lists its extensions (`NAME` or `NAME@REF`, a branch or a `vX.Y.Z` release; default
+`main`). The default `[hosting]` installs [ispconfig-rest-hosting](https://github.com/FELDSAM-INC/ispconfig-rest-hosting),
+which provides the hosting features and the server tools; ispconfig-rest 1.1 or newer. Extensions added to the list
+later are installed on the next run; `ispconfig-rest update` updates them with the API.
+
+With the hosting extension, the panel's root gets its own SSH key (`/root/.ssh/ispconfig-tools`). Its public key is authorized for root on each
 server, from the panel's address only. The servers' host keys are read through Ansible's connection, so
 `ispconfig-rest server-tools` works without accepting unknown host keys. The server tools are `database`, `web-logs`
 and `waf` by default (`ispconfig_rest_server_tools`), plus:
@@ -220,6 +225,7 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 | `ispconfig_rest_install` | `true` | ispconfig-rest and the server tools on the panel |
 | `ispconfig_rest_version` | `main` | branch or release tag of ispconfig-rest |
 | `ispconfig_rest_port` | `8090` | HTTPS port of ispconfig-rest |
+| `ispconfig_rest_extensions` | `[hosting]` | extensions of ispconfig-rest, `NAME` or `NAME@REF` |
 
 ## After ISPConfig updates
 
