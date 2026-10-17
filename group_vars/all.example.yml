@@ -20,5 +20,8 @@ ispconfig_ssl_cert:
 ispconfig_rest_version: main
 ispconfig_rest_server_tools: [database, web-logs, waf]
 ispconfig_rest_dns_catalog: true
+# CPU, memory and process limits per hosting account and website (server tool php-limits; cgroup v2)
+ispconfig_rest_php_limits: true
 # ispconfig_rest_file_manager_key: "ssh-ed25519 AAAA... whmcs-files"
-# ispconfig_rest_whmcs_ip: 198.51.100.10
+# Every outgoing address of WHMCS, IPv4 and IPv6, comma separated
+# ispconfig_rest_whmcs_ip: 198.51.100.10,2001:db8::10

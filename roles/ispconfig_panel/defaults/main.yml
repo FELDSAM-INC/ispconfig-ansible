@@ -16,7 +16,8 @@ ispconfig_rest_url: ""
 ispconfig_rest_server_tools: [database, web-logs, waf]
 ispconfig_rest_dns_catalog: true
 ispconfig_rest_php_limits: false
-# WHMCS file manager: the WHMCS public SSH key (the key itself, not a path) and its outgoing IP address.
+# WHMCS file manager: the WHMCS public SSH key (the key itself, not a path) and its outgoing addresses: IPv4 and IPv6,
+# comma separated, for a WHMCS host with both (hosting extension 1.1.0).
 ispconfig_rest_file_manager_key: ""
 ispconfig_rest_whmcs_ip: ""
 # Key root on the panel uses for the servers; its public part is authorized for root on each server, from the

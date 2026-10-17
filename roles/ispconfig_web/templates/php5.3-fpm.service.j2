@@ -6,9 +6,10 @@ After=network.target
 [Service]
 Type=simple
 PIDFile=/run/php/php5.3-fpm.pid
-Environment=PHP_INI_SCAN_DIR={{ ispconfig_php53_config_dir }}/fpm/conf.d
-ExecStartPre={{ ispconfig_php53_prefix }}/sbin/php-fpm --test --fpm-config {{ ispconfig_php53_config_dir }}/fpm/php-fpm.conf -c {{ ispconfig_php53_config_dir }}/fpm
-ExecStart={{ ispconfig_php53_prefix }}/sbin/php-fpm --nodaemonize --fpm-config {{ ispconfig_php53_config_dir }}/fpm/php-fpm.conf -c {{ ispconfig_php53_config_dir }}/fpm
+# The packaged command line (/usr/sbin/php-fpm5.3 sets FPM's php.ini), which ispconfig-php-limits recognises. PHP 5.3
+# has no systemd notification, so the service is simple.
+ExecStartPre=/usr/sbin/php-fpm5.3 --test --fpm-config {{ ispconfig_php53_config_dir }}/fpm/php-fpm.conf
+ExecStart=/usr/sbin/php-fpm5.3 --nodaemonize --fpm-config {{ ispconfig_php53_config_dir }}/fpm/php-fpm.conf
 ExecReload=/bin/kill -USR2 $MAINPID
 RuntimeDirectory=php
 RuntimeDirectoryPreserve=yes

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Managed by Ansible (ispconfig_web role): PHP 5.3 FPM under the name of the packaged versions (php-fpmX.Y), so the
+# php5.3-fpm unit has their layout and ispconfig-php-limits can manage it. The build's own php.ini and conf.d are the
+# CLI's; FPM, its master and every dedicated pool read the FPM ones.
+PHP_INI_SCAN_DIR={{ ispconfig_php53_config_dir }}/fpm/conf.d
+export PHP_INI_SCAN_DIR
+exec {{ ispconfig_php53_prefix }}/sbin/php-fpm -c {{ ispconfig_php53_config_dir }}/fpm "$@"

@@ -77,7 +77,7 @@ on db1 test -x /usr/bin/php8.3 || fail "PHP 8.3 on db1"
 
 echo "== ispconfig-rest and the server tools"
 on panel ispconfig-rest status
-on panel ispconfig-rest server-tools status --components database,web-logs,dns-catalog
+on panel ispconfig-rest server-tools status --components database,web-logs,php-limits,dns-catalog
 on ns1 ispconfig-dns-catalog status >/dev/null || fail "dns-catalog"
 
 echo "== Websites on PHP 5.3 and PHP 5.6 through ISPConfig"
@@ -117,6 +117,21 @@ for version in 5.3 5.6; do
     [[ $served == "$version".* ]] || fail "$domain serves PHP '$served'"
 done
 on web1 sh -c 'ls /etc/php/5.3/fpm/pool.d/ | grep -q "^web[0-9]*\.conf$"' || fail "no ISPConfig pool for PHP 5.3"
+
+echo "== PHP resource limits manage every PHP-FPM service, PHP 5.3 included"
+limits=$(on web1 ispconfig-php-limits status)
+echo "$limits"
+grep -qx 'Support: ready' <<<"$limits" || fail "php-limits support"
+for version in 5.3 5.6 8.3; do
+    grep -qx "php$version-fpm: managed" <<<"$limits" || fail "php$version-fpm is not managed by php-limits"
+done
+# PHP 5.3 websites read FPM's php.ini (/usr/sbin/php-fpm5.3), also under php-limits
+root=$(sql "SELECT document_root FROM web_domain WHERE domain = 'php53.ispcp.test'")
+user=$(sql "SELECT system_user FROM web_domain WHERE domain = 'php53.ispcp.test'")
+on web1 sh -c "printf '%s' '<?php echo php_ini_loaded_file();' > $root/web/ini.php && chown $user: $root/web/ini.php"
+ini=$(on web1 curl -fs -H 'Host: php53.ispcp.test' http://127.0.0.1/ini.php || true)
+echo "php53.ispcp.test: $ini"
+[ "$ini" = /etc/php/5.3/fpm/php.ini ] || fail "PHP 5.3 website reads '$ini'"
 
 echo "== MariaDB listens on the private address only where needed"
 listening() { on "$1" ss -ltnH 'sport = :3306' | awk '{print $4}' | sort | tr '\n' ' '; }

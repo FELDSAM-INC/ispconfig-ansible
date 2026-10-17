@@ -110,8 +110,10 @@ ISPConfig (System > Additional PHP Versions). Removing a version from the list d
   and tidy (their current libraries do not fit PHP 5.3) and opcache (PHP 5.3 has none).
 - PHP-FPM only: PHP 5.3 builds no CGI binary next to FPM. Choose PHP-FPM for its websites, which nginx uses anyway.
 - It runs as the `php5.3-fpm` service, configured like the packaged versions: `/etc/php/5.3/{cli,fpm}/php.ini`,
-  `conf.d` and `fpm/pool.d`, where ISPConfig writes the website pools. `/usr/bin/php5.3` is its CLI, also in SSH jails
-  (jailkit section `php5_3`). Extra php.ini settings: `ispconfig_php53_ini`.
+  `conf.d` and `fpm/pool.d`, where ISPConfig writes the website pools. `/usr/sbin/php-fpm5.3` starts its FPM with the
+  FPM php.ini, as the packaged command does, so the `php-limits` server tool (hosting extension 1.1.1) manages it like
+  the other versions. `/usr/bin/php5.3` is its CLI, also in SSH jails (jailkit section `php5_3`). Extra php.ini
+  settings: `ispconfig_php53_ini`.
 - PHP 5.3 has had no security fixes since 2014, and neither has OpenSSL 1.0.2 since 2019. Offer it only to websites
   that cannot move on, and keep them isolated (PHP-FPM chroot, open_basedir).
 - It is rebuilt when its sources, the build script or the paths change. A failed build leaves the working one in place.
@@ -136,9 +138,10 @@ server, from the panel's address only. The servers' host keys are read through A
 `ispconfig-rest server-tools` works without accepting unknown host keys. The server tools are `database`, `web-logs`
 and `waf` by default (`ispconfig_rest_server_tools`), plus:
 
-- `file-manager` when `ispconfig_rest_file_manager_key` (the WHMCS public key) and `ispconfig_rest_whmcs_ip` are set,
+- `file-manager` when `ispconfig_rest_file_manager_key` (the WHMCS public key) and `ispconfig_rest_whmcs_ip` are set;
+  list every outgoing address of WHMCS, IPv4 and IPv6, comma separated: a WHMCS host with both connects over IPv6,
+- `php-limits` when `ispconfig_rest_php_limits` is true (as in `group_vars/all.example.yml`),
 - `dns-catalog` on the DNS servers (`ispconfig_rest_dns_catalog`),
-- `php-limits` when `ispconfig_rest_php_limits` is true.
 
 They are installed again only when the servers or components change. Later updates: `ispconfig-rest server-tools
 update`.

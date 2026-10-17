@@ -15,7 +15,7 @@
 - name: Check the file manager settings
   ansible.builtin.assert:
     that: not ispconfig_rest_file_manager_key or ispconfig_rest_whmcs_ip
-    fail_msg: The file manager needs ispconfig_rest_whmcs_ip, the WHMCS server's outgoing address, with its key.
+    fail_msg: The file manager needs ispconfig_rest_whmcs_ip, the WHMCS server's outgoing addresses, with its key.
     quiet: true
 
 - name: SSH access to the servers

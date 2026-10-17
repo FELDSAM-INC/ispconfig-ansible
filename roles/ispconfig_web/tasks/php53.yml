@@ -111,6 +111,15 @@
     force: false
   notify: Restart PHP 5.3
 
+- name: php-fpm5.3 command (PHP 5.3 FPM with its own php.ini, named like the packaged versions)
+  ansible.builtin.template:
+    src: php-fpm5.3.j2
+    dest: /usr/sbin/php-fpm5.3
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart PHP 5.3
+
 - name: php5.3-fpm service
   ansible.builtin.template:
     src: php5.3-fpm.service.j2
