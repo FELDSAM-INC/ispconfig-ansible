@@ -32,6 +32,10 @@
         OPENSSL_SHA256: "{{ ispconfig_php53_sources.openssl.sha256 }}"
         CURL_URL: "{{ ispconfig_php53_sources.curl.url }}"
         CURL_SHA256: "{{ ispconfig_php53_sources.curl.sha256 }}"
+        LIBXML2_URL: "{{ ispconfig_php53_sources.libxml2.url }}"
+        LIBXML2_SHA256: "{{ ispconfig_php53_sources.libxml2.sha256 }}"
+        LIBXSLT_URL: "{{ ispconfig_php53_sources.libxslt.url }}"
+        LIBXSLT_SHA256: "{{ ispconfig_php53_sources.libxslt.sha256 }}"
       async: "{{ ispconfig_php53_build_timeout }}"
       poll: 15
       changed_when: true

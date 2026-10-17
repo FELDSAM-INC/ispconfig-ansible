@@ -70,7 +70,9 @@ on web1 /usr/bin/php5.3 -r 'echo PHP_VERSION, " ", OPENSSL_VERSION_TEXT, "\n";'
 on web1 systemctl is-active php5.3-fpm php5.6-fpm >/dev/null || fail "PHP-FPM services"
 on web1 grep -q '^\[php5_3\]' /etc/jailkit/jk_init.ini || fail "jailkit section"
 on web1 grep -qx '40110 40210' /etc/pure-ftpd/conf/PassivePortRange || fail "FTP passive ports"
-[ "$(on db1 php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')" = "8.3" ] || fail "PHP CLI on db1"
+# The tools' PHP 8.3 is the default where the system's PHP is older; a newer one (8.5 on Ubuntu 26.04) stays.
+on db1 php -r 'exit(version_compare(PHP_VERSION, "8.3", ">=") ? 0 : 1);' || fail "PHP CLI on db1"
+on db1 test -x /usr/bin/php8.3 || fail "PHP 8.3 on db1"
 
 echo "== ispconfig-rest and the server tools"
 on panel ispconfig-rest status

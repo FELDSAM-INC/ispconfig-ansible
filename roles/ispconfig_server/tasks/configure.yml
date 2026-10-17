@@ -15,10 +15,12 @@
   register: ispconfig_mariadb_server
   changed_when: false
 
+- name: MariaDB version
+  ansible.builtin.set_fact:
+    ispconfig_mariadb_version: "{{ ispconfig_mariadb_server.stdout | regex_search('Ver ([0-9]+\\.[0-9]+)', '\\1') | first }}"
+
 # The autoinstaller lets MariaDB listen on all addresses (see ispconfig_mariadb_bind_address).
 - name: Bind address of MariaDB
-  vars:
-    ispconfig_mariadb_version: "{{ ispconfig_mariadb_server.stdout | regex_search('Ver ([0-9]+\\.[0-9]+)', '\\1') | first }}"
   ansible.builtin.copy:
     dest: /etc/mysql/mariadb.conf.d/90-ispconfig-ansible.cnf
     content: |
@@ -28,7 +30,23 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart MariaDB
+  register: ispconfig_mariadb_config
+
+# By state, not only on change: a run that failed before its handlers would leave MariaDB listening as before (with
+# the autoinstaller's configuration, on all addresses).
+- name: Addresses MariaDB listens on
+  ansible.builtin.command: ss -ltnH 'sport = :3306'
+  register: ispconfig_mariadb_listening
+  changed_when: false
+
+- name: Restart MariaDB to listen as configured
+  ansible.builtin.systemd_service:
+    name: mariadb
+    state: restarted
+  when: >-
+    ispconfig_mariadb_config is changed or
+    ispconfig_mariadb_listening.stdout_lines | map('split') | map(attribute=3) | sort | list
+    != ispconfig_mariadb_bind_address.split(',') | map('trim') | map('regex_replace', '$', ':3306') | sort | list
 
 - name: Read the ISPConfig server ID
   ansible.builtin.command: sed -n "s/^\$conf\['server_id'\] = '\([0-9]*\)';$/\1/p" {{ ispconfig_installed_file }}

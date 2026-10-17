@@ -67,6 +67,15 @@
       changed_when: false
       failed_when: ispconfig_autoinstaller_patched.stdout | trim != '1'
 
+    # ISPConfig 3.3.2 is the first stable release for Ubuntu 26.04, but the autoinstaller still treats 26.04 as dev
+    # only and silently installs ISPConfig's develop branch. Keep the stable channel there; no-op once it is fixed.
+    - name: Let the autoinstaller install the stable release on Ubuntu 26.04
+      ansible.builtin.replace:
+        path: "{{ ispconfig_autoinstaller_dir }}/lib/os/class.ISPConfigUbuntu2604OS.inc.php"
+        regexp: 'protected function isStableSupported\(\)\s*\{\s*return false;\s*\}'
+        replace: "protected function isStableSupported() {\n\t\treturn true;\n\t}"
+      when: ispconfig_channel == 'stable' and ansible_distribution == 'Ubuntu' and ansible_distribution_version == '26.04'
+
     - name: Ansible values for the autoinstaller
       ansible.builtin.copy:
         src: autoinstall.php
@@ -103,6 +112,14 @@
           test -f {{ ispconfig_installed_file }} && grep -q 'Installation ready' {{ ispconfig_autoinstaller_log }} ||
           { grep -vi 'password' {{ ispconfig_autoinstaller_log }} | sed 's/\x1b\[[0-9;]*m//g' | tail -n 40; exit 1; }
       changed_when: false
+
+    - name: Check that the stable channel was installed
+      ansible.builtin.command:
+        cmd: grep -c 'Switching to dev channel' {{ ispconfig_autoinstaller_log }}
+      register: ispconfig_autoinstaller_dev
+      changed_when: false
+      failed_when: ispconfig_autoinstaller_dev.stdout | trim != '0'
+      when: ispconfig_channel == 'stable'
   always:
     - name: Remove the Ansible values (secrets)
       ansible.builtin.file:

@@ -17,7 +17,9 @@ runs once with all its services. Mail is not covered.
 ## Requirements
 
 - Ansible core 2.15 or newer on your machine; only the built-in modules are used.
-- Fresh servers with Debian 12, Debian 13, Ubuntu 22.04 or Ubuntu 24.04, reachable as root (or a user with sudo).
+- Fresh servers with Debian 12, Debian 13, Ubuntu 22.04, Ubuntu 24.04 or Ubuntu 26.04, reachable as root (or a user with sudo).
+  Ubuntu 26.04 needs ISPConfig 3.3.2 or newer, its first stable release for it; the role keeps the autoinstaller on
+  the stable channel there instead of its automatic switch to ISPConfig's develop branch.
   The autoinstaller reconfigures the whole server: do not use servers that already run something.
 - Each server's FQDN (at least two dots) as its inventory name. That becomes the ISPConfig server name. For Let's
   Encrypt certificates on the interface, its DNS record must point to the server; otherwise it gets a self-signed one.

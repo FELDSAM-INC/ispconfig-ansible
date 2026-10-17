@@ -6,6 +6,8 @@
 - name: Prepare the ISPConfig servers
   hosts: ispconfig_panel:ispconfig_web:ispconfig_db:ispconfig_dns
   become: true
+  # Notified restarts also run when a later task fails, so a rerun does not miss them.
+  force_handlers: true
   tasks:
     - name: Services, checks, host name and /etc/hosts
       ansible.builtin.include_role:
@@ -18,6 +20,8 @@
 - name: ISPConfig panel (master)
   hosts: ispconfig_panel
   become: true
+  # Notified restarts also run when a later task fails, so a rerun does not miss them.
+  force_handlers: true
   tags: panel
   roles:
     - ispconfig_panel
@@ -26,6 +30,8 @@
 - name: ISPConfig servers joining the panel
   hosts: ispconfig_web:ispconfig_db:ispconfig_dns
   become: true
+  # Notified restarts also run when a later task fails, so a rerun does not miss them.
+  force_handlers: true
   serial: "{{ ispconfig_serial | default('100%') }}"
   tasks:
     # One task for all servers, so their autoinstallers run at the same time; the roles below find ISPConfig

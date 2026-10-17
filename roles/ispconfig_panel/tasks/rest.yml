@@ -5,10 +5,11 @@
     path: /usr/local/bin/ispconfig-rest
   register: ispconfig_rest_installed
 
+# ispconfig-rest runs on ispconfig_tools_php_version, whatever the system's default PHP is (8.5 on Ubuntu 26.04).
 # The autoinstaller's PHP modules lack bcmath.
-- name: PHP extensions of ispconfig-rest
+- name: PHP of ispconfig-rest
   ansible.builtin.apt:
-    name: "{{ ['bcmath', 'mbstring', 'mysql', 'xml'] | map('regex_replace', '^', 'php' ~ ispconfig_php_tools ~ '-') | list }}"
+    name: "{{ ['cli', 'fpm', 'bcmath', 'mbstring', 'mysql', 'xml'] | map('regex_replace', '^', 'php' ~ ispconfig_php_tools ~ '-') | list }}"
 
 - name: Install ispconfig-rest
   when: not ispconfig_rest_installed.stat.exists
@@ -35,6 +36,7 @@
         argv: "{{ ['bash', '/root/ispconfig-rest-install.sh'] + ispconfig_rest_extensions | map('regex_replace', '^', '--extension ') | map('split', ' ') | flatten }}"
       environment:
         ISPC_REST_NONINTERACTIVE: "1"
+        ISPC_REST_PHP: /usr/bin/php{{ ispconfig_php_tools }}
         ISPC_REST_CREATE_KEY: "no"
         ISPC_REST_REPO: https://github.com/{{ ispconfig_rest_repository }}.git
         ISPC_REST_BRANCH: "{{ ispconfig_rest_version }}"

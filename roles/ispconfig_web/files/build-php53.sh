@@ -1,16 +1,19 @@
 #!/bin/bash
 # Builds PHP 5.3 (CLI and FPM; PHP 5.3 builds no CGI next to FPM) for old websites on a current Debian/Ubuntu web server. No distribution or sury
-# package exists for it, and it needs OpenSSL 1.0.x: a private OpenSSL and libcurl are linked statically, so the
-# binaries never load the system's OpenSSL 3. Sources are verified against pinned SHA-256 sums before use.
+# package exists for it, and it needs OpenSSL 1.0.x and a libxml2 before 2.13: a private OpenSSL, libcurl, libxml2
+# and libxslt are linked statically, so the binaries never load the system's OpenSSL 3 or libxml2 (2.15 on Ubuntu
+# 26.04, without API that PHP 5.3 uses). Sources are verified against pinned SHA-256 sums before use.
 #
 # Usage: build-php53.sh PREFIX CONFIG_DIR   (e.g. /opt/php-5.3 /etc/php/5.3), with PHP_URL, PHP_SHA256,
-# OPENSSL_URL, OPENSSL_SHA256, CURL_URL and CURL_SHA256 set by the ispconfig_web role. The new build replaces PREFIX
+# OPENSSL_URL, OPENSSL_SHA256, CURL_URL, CURL_SHA256, LIBXML2_URL, LIBXML2_SHA256, LIBXSLT_URL and LIBXSLT_SHA256 set
+# by the ispconfig_web role. The new build replaces PREFIX
 # only after its checks pass, so a failed build never removes a working PHP.
 set -euo pipefail
 
 PREFIX=${1:?prefix}
 CONFIG_DIR=${2:?config directory}
 : "${PHP_URL:?}" "${PHP_SHA256:?}" "${OPENSSL_URL:?}" "${OPENSSL_SHA256:?}" "${CURL_URL:?}" "${CURL_SHA256:?}"
+: "${LIBXML2_URL:?}" "${LIBXML2_SHA256:?}" "${LIBXSLT_URL:?}" "${LIBXSLT_SHA256:?}"
 WORK=${WORK:-/usr/local/src/ispconfig-php53}
 JOBS=${JOBS:-$(nproc)}
 DEPS="$WORK/deps"
@@ -59,8 +62,22 @@ run curl-configure ./configure --prefix="$DEPS" --disable-shared --enable-static
     --disable-ldap --disable-ldaps --disable-manual --disable-docs
 run curl-make make -j"$JOBS"
 run curl-install make install
+# libxml2 of the 2.12 series and a libxslt built against it, static; xsl and the XML extensions share it.
+src=$(fetch "$LIBXML2_URL" "$LIBXML2_SHA256")
+cd "$src"
+run libxml2-configure ./configure --prefix="$DEPS" --disable-shared --enable-static --with-pic --without-python \
+    --without-lzma --without-icu --without-http --with-zlib
+run libxml2-make make -j"$JOBS"
+run libxml2-install make install
+src=$(fetch "$LIBXSLT_URL" "$LIBXSLT_SHA256")
+cd "$src"
+run libxslt-configure ./configure --prefix="$DEPS" --disable-shared --enable-static --with-pic --without-python \
+    --without-crypto --with-libxml-prefix="$DEPS"
+run libxslt-make make -j"$JOBS"
+run libxslt-install make install
 # PHP's --with-libdir applies to every prefix it searches, the private one included.
 ln -sfn . "$DEPS/lib/$MULTIARCH"
+export PATH="$DEPS/bin:$PATH"
 
 src=$(fetch "$PHP_URL" "$PHP_SHA256")
 cd "$src"
@@ -85,7 +102,7 @@ run php-configure ./configure --prefix="$PREFIX" --with-libdir="lib/$MULTIARCH" 
     --with-gd --with-jpeg-dir=/usr --with-png-dir=/usr --with-freetype-dir=/usr --enable-gd-native-ttf \
     --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-pdo-sqlite --with-sqlite3 \
     --enable-soap --enable-sockets --enable-bcmath --enable-calendar --enable-exif --enable-ftp --with-gettext \
-    --with-iconv --with-xsl --with-xmlrpc --with-mhash --enable-shmop --enable-sysvsem --enable-sysvshm \
+    --with-libxml-dir="$DEPS" --with-iconv --with-xsl="$DEPS" --with-xmlrpc --with-mhash --enable-shmop --enable-sysvsem --enable-sysvshm \
     --enable-sysvmsg --enable-wddx "${mcrypt[@]}"
 run php-make make -j"$JOBS"
 run php-install make install INSTALL_ROOT="$ROOT"
@@ -99,13 +116,13 @@ ln -sfn /etc/ssl/certs/ca-certificates.crt "$STAGE/ssl/cert.pem"
 
 for binary in bin/php sbin/php-fpm; do
     "$STAGE/$binary" -n -v >/dev/null
-    if ldd "$STAGE/$binary" | grep -Eq 'lib(ssl|crypto)\.so'; then
-        echo "$binary loads a shared OpenSSL" >&2
+    if ldd "$STAGE/$binary" | grep -Eq 'lib(ssl|crypto|xml2|xslt|exslt)\.so'; then
+        echo "$binary loads a shared OpenSSL or libxml2" >&2
         exit 1
     fi
 done
 modules=$("$STAGE/bin/php" -n -m)
-for module in curl gd mbstring mysql mysqli mysqlnd openssl pdo_mysql soap zip; do
+for module in curl dom gd libxml mbstring mysql mysqli mysqlnd openssl pdo_mysql soap xsl zip; do
     grep -qx "$module" <<<"$modules" || { echo "PHP 5.3 was built without $module" >&2; exit 1; }
 done
 

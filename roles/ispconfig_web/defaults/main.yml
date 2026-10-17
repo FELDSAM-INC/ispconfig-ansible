@@ -15,6 +15,12 @@ ispconfig_php53_sources:
   curl:
     url: https://curl.se/download/curl-7.88.1.tar.xz
     sha256: 1dae31b2a7c1fe269de99c0c31bb488346aab3459b5ffca909d6938249ae415f
+  libxml2:
+    url: https://download.gnome.org/sources/libxml2/2.12/libxml2-2.12.10.tar.xz
+    sha256: c3d8c0c34aa39098f66576fe51969db12a5100b956233dc56506f7a8679be995
+  libxslt:
+    url: https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.39.tar.xz
+    sha256: 2a20ad621148339b0759c4d4e96719362dee64c9a096dbba625ba053846349f0
 ispconfig_php53_build_packages:
   - build-essential
   - pkg-config
