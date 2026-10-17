@@ -78,6 +78,21 @@
         tasks_from: server_tools
       when: ispconfig_rest_install | default(true) | bool and 'hosting' in ispconfig_rest_extensions | default(['hosting']) | map('regex_replace', '@.*$', '')
 
+# ISPConfig firewall records of the servers (ispconfig_firewall), once they have all joined; ISPConfig's firewall plugin
+# applies them with ufw.
+- name: ISPConfig firewall records
+  hosts: ispconfig_panel
+  become: true
+  tags: firewall
+  tasks:
+    - name: Firewall record of every server
+      ansible.builtin.include_role:
+        name: ispconfig_panel
+        tasks_from: firewall
+        apply:
+          tags: firewall
+      when: ispconfig_rest_install | default(true) | bool
+
 # Secondaries following the catalog zones of the DNS servers: list them in ispconfig_dns_secondaries and make
 # ispconfig_dns_primaries a child group of ispconfig_dns (see hosts.example). Skipped without such hosts.
 - name: DNS secondaries

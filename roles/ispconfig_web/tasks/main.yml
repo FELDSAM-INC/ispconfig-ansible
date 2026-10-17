@@ -10,3 +10,31 @@
 - name: PHP 5.3
   ansible.builtin.include_tasks: php53.yml
   when: "'5.3' in ispconfig_php_build"
+
+# The php-limits server tool takes over the PHP-FPM services present when it is installed. A version added or changed
+# afterwards (a new PHP version, PHP 5.3's unit) stays "available" until install-services, which restarts it once.
+- name: Restart changed PHP-FPM services before php-limits takes them over
+  ansible.builtin.meta: flush_handlers
+
+- name: Look for the php-limits server tool
+  ansible.builtin.stat:
+    path: /usr/local/sbin/ispconfig-php-limits
+  register: ispconfig_php_limits_tool
+
+- name: PHP-FPM services php-limits does not manage yet
+  ansible.builtin.command: /usr/local/sbin/ispconfig-php-limits status
+  register: ispconfig_php_limits_status
+  changed_when: false
+  when: ispconfig_php_limits_tool.stat.exists
+
+- name: Let php-limits manage the new PHP-FPM services
+  ansible.builtin.command: /usr/local/sbin/ispconfig-php-limits install-services
+  when:
+    - ispconfig_php_limits_tool.stat.exists
+    - ispconfig_php_limits_available | length > 0
+  vars:
+    ispconfig_php_limits_available: "{{ ispconfig_php_limits_status.stdout_lines | select('search', '^php[0-9.]+-fpm: available') | list }}"
+  # The services it takes over, in the play output
+  loop: ["{{ ispconfig_php_limits_available | join('; ') }}"]
+  loop_control:
+    label: "{{ item }}"

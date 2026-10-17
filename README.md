@@ -140,7 +140,9 @@ and `waf` by default (`ispconfig_rest_server_tools`), plus:
 
 - `file-manager` when `ispconfig_rest_file_manager_key` (the WHMCS public key) and `ispconfig_rest_whmcs_ip` are set;
   list every outgoing address of WHMCS, IPv4 and IPv6, comma separated: a WHMCS host with both connects over IPv6,
-- `php-limits` when `ispconfig_rest_php_limits` is true (as in `group_vars/all.example.yml`),
+- `php-limits` when `ispconfig_rest_php_limits` is true (as in `group_vars/all.example.yml`); PHP versions added or
+  changed later are handed to it by the next run of the web servers (`ispconfig-php-limits install-services`, which
+  restarts each such PHP-FPM service once),
 - `dns-catalog` on the DNS servers (`ispconfig_rest_dns_catalog`),
 
 They are installed again only when the servers or components change. Later updates: `ispconfig-rest server-tools
@@ -177,8 +179,8 @@ MariaDB listens where it has to (`ispconfig_mariadb_bind_address`):
 | database servers | all addresses: the web servers over the private network, customers with remote access from outside |
 | web and DNS servers | 127.0.0.1 |
 
-When the panel's `ispconfig_address` is not a private address, the role warns: the firewall must then keep 3306 to the
-ISPConfig servers.
+When the panel's `ispconfig_address` is not a private address, the role warns: the ISPConfig firewall record opens 3306
+to every address, so restrict it to the ISPConfig servers outside ISPConfig, or use a private network.
 
 Databases of websites on another server work without manual steps:
 
@@ -195,19 +197,30 @@ Databases of websites on another server work without manual steps:
 
 ## Firewall
 
-The autoinstaller installs ufw, and ISPConfig manages it once you add a firewall record for a server
-(System > Firewall). Include these ports, in addition to the services' own:
+With `ispconfig_firewall` (default `true`) the autoinstaller installs ufw, and the panel writes each server's firewall
+record in ISPConfig (System > Firewall) after the servers have joined. ISPConfig's firewall plugin on the server then
+denies incoming traffic except the listed ports. The ports follow the groups of the server:
 
-| Server | Port | From |
+| Server | TCP | UDP |
 | --- | --- | --- |
-| panel | 3306/tcp (MariaDB) | the ISPConfig servers (private network) |
-| panel | 8080/tcp (interface), 8090/tcp (ispconfig-rest) | administrators, WHMCS |
-| database servers | 3306/tcp | web servers (private network); customers with remote access |
-| all servers | 22/tcp | the panel (server tools), administrators |
-| web servers | 21/tcp and `ispconfig_ftp_passive_ports` | FTP users |
-| DNS servers | 53/tcp+udp | everyone; transfers by TSIG key |
+| every server | SSH (`ispconfig_ssh_port`, default `ansible_port` or 22), 80 (Let's Encrypt certificate of the server name, also over IPv6; without a web server nothing listens there except during issuance and renewal) | |
+| panel | `ispconfig_interface_port` (8080), `ispconfig_rest_port` (8090), 3306 (the master database, for the servers) | |
+| web servers | 20, 21, `ispconfig_ftp_passive_ports`, 443 | |
+| web and mail server with Roundcube | 8081 (webmail) | |
+| database servers | 3306 | |
+| DNS servers | 53 | 53 |
+| mail servers | 25, 465, 587, 110, 995, 143, 993, 4190 | |
 
-`ispconfig_firewall: false` leaves out ufw and ISPConfig's firewall management.
+Add ports with `ispconfig_firewall_tcp` and `ispconfig_firewall_udp` (lists, host or group variables; `"8000:8010"`
+for a range). Ports already in a record stay, so ports added in ISPConfig are kept, and a record switched off there
+stays off; the role only adds the missing ones. The records are written through ispconfig-rest with a temporary
+administrator key, created only when a record changes and always revoked.
+
+ISPConfig opens a port to every address; it cannot limit a port to the private network. The panel's 3306 stays private
+because MariaDB listens on `ispconfig_address` only (see above), which must then be a private address. The first record
+of a server resets ufw, so rules added outside ISPConfig are lost; put them in `ispconfig_firewall_tcp`/`_udp`.
+
+`ispconfig_firewall: false` leaves out ufw, ISPConfig's firewall management and the record.
 
 ## Variables
 
@@ -226,6 +239,8 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 | `ispconfig_webserver` | `nginx` | `nginx` or `apache` |
 | `ispconfig_jailkit`, `ispconfig_quota` | `true` | jailkit and file system quota on web servers |
 | `ispconfig_firewall` | `true` | ufw managed by ISPConfig |
+| `ispconfig_ssh_port` | `ansible_port` or 22 | SSH port kept open in the firewall record |
+| `ispconfig_firewall_tcp`, `ispconfig_firewall_udp` | `[]` | further ports of the server's firewall record |
 | `ispconfig_ssl_cert` | `{}` | self-signed certificate fields: `country`, `state`, `locality`, `organisation`, `organisation_unit`, `email` |
 | `ispconfig_autoinstaller_args` | `[]` | further autoinstaller options, e.g. `--monit`, `--unattended-upgrades=autoclean`, `--ssh-harden` |
 | `ispconfig_autoinstaller_sha256` | empty | pin the autoinstaller download |

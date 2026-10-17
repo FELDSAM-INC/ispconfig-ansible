@@ -1,0 +1,97 @@
+# ISPConfig firewall records (System > Firewall) of every server that has the firewall (ispconfig_firewall). ISPConfig's
+# firewall plugin on each server turns its record into ufw rules: incoming traffic is denied except the listed ports.
+# The ports follow the server's groups (README "Firewall"); ports already in a record stay, so additions made in
+# ISPConfig are kept, and a record switched off there stays off. Records are read from the master database and written
+# through ispconfig-rest (datalog), with a temporary administrator key that is always revoked.
+- name: Ports of each server
+  ansible.builtin.set_fact:
+    ispconfig_firewall_wanted: >-
+      {{ ispconfig_firewall_wanted | default({}) | combine({ispconfig_firewall_name: {'tcp': ispconfig_firewall_tcp, 'udp': ispconfig_firewall_udp}}) }}
+  loop: >-
+    {{ (groups['ispconfig_panel'] | default([]) + groups['ispconfig_web'] | default([]) + groups['ispconfig_db'] | default([])
+        + groups['ispconfig_dns'] | default([]) + groups['ispconfig_mail'] | default([])) | unique }}
+  when: hostvars[item].ispconfig_firewall | default(true) | bool
+  vars:
+    ispconfig_firewall_host: "{{ hostvars[item] }}"
+    ispconfig_firewall_name: "{{ ispconfig_firewall_host.ispconfig_hostname | default(item) }}"
+    ispconfig_firewall_in: "{{ ispconfig_firewall_host.group_names }}"
+    ispconfig_firewall_tcp: >-
+      {{ ([ispconfig_firewall_host.ispconfig_ssh_port | default(ispconfig_firewall_host.ansible_port | default(22)), 80]
+          + ([ispconfig_firewall_host.ispconfig_interface_port | default(8080), ispconfig_rest_port, 3306]
+             if 'ispconfig_panel' in ispconfig_firewall_in else [])
+          + ([20, 21, 443, ispconfig_firewall_host.ispconfig_ftp_passive_ports | default('40110-40210') | replace('-', ':')]
+             if 'ispconfig_web' in ispconfig_firewall_in else [])
+          + ([8081] if 'ispconfig_web' in ispconfig_firewall_in and 'ispconfig_mail' in ispconfig_firewall_in
+             and ispconfig_firewall_host.ispconfig_roundcube | default(true) | bool else [])
+          + ([3306] if 'ispconfig_db' in ispconfig_firewall_in else [])
+          + ([53] if 'ispconfig_dns' in ispconfig_firewall_in else [])
+          + ([25, 465, 587, 110, 995, 143, 993, 4190] if 'ispconfig_mail' in ispconfig_firewall_in else [])
+          + ispconfig_firewall_host.ispconfig_firewall_tcp | default([]))
+         | map('string') | unique | list }}
+    ispconfig_firewall_udp: >-
+      {{ ((['53'] if 'ispconfig_dns' in ispconfig_firewall_in else []) + ispconfig_firewall_host.ispconfig_firewall_udp | default([]))
+         | map('string') | unique | list }}
+
+- name: Current firewall records
+  ansible.builtin.command:
+    cmd: mysql --defaults-file=/etc/mysql/debian.cnf --batch --skip-column-names dbispconfig
+    stdin: >-
+      SELECT s.server_id, s.server_name, f.firewall_id IS NOT NULL, IFNULL(f.tcp_port, ''), IFNULL(f.udp_port, ''),
+      IFNULL(f.active, 'y') FROM server s LEFT JOIN firewall f ON f.server_id = s.server_id;
+  register: ispconfig_firewall_current
+  changed_when: false
+  when: ispconfig_firewall_wanted | default({}) | length > 0
+
+- name: Firewall records to write
+  ansible.builtin.set_fact:
+    ispconfig_firewall_writes: >-
+      {%- set writes = [] -%}
+      {%- for line in ispconfig_firewall_current.stdout_lines | default([]) -%}
+      {%-   set row = line.split('\t') -%}
+      {%-   if row[1] in ispconfig_firewall_wanted -%}
+      {%-     set wanted = ispconfig_firewall_wanted[row[1]] -%}
+      {%-     set tcp = row[3].split(',') | map('trim') | reject('equalto', '') | list -%}
+      {%-     set udp = row[4].split(',') | map('trim') | reject('equalto', '') | list -%}
+      {%-     set add_tcp = wanted.tcp | reject('in', tcp) | list -%}
+      {%-     set add_udp = wanted.udp | reject('in', udp) | list -%}
+      {%-     if row[2] == '0' or add_tcp or add_udp -%}
+      {%-       set _ = writes.append({'server_id': row[0] | int, 'name': row[1], 'tcp_port': (tcp + add_tcp) | join(','),
+                                       'udp_port': (udp + add_udp) | join(','), 'active': row[5] == 'y'}) -%}
+      {%-     endif -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ writes }}
+  when: ispconfig_firewall_wanted | default({}) | length > 0
+
+- name: Write the firewall records through ispconfig-rest
+  when: ispconfig_firewall_writes | default([]) | length > 0
+  block:
+    - name: Temporary administrator key for the firewall records
+      ansible.builtin.command: ispconfig-rest key:create ansible-firewall
+      register: ispconfig_firewall_key
+      changed_when: false
+      no_log: true
+
+    - name: Firewall record of each server
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ ispconfig_rest_port }}/api/v1/servers/{{ item.server_id }}/firewall"
+        method: PUT
+        headers:
+          X-API-Key: "{{ ispconfig_firewall_key.stdout | regex_search('isp_[A-Za-z0-9]+') }}"
+          Accept: application/json
+        body_format: json
+        body:
+          tcp_port: "{{ item.tcp_port }}"
+          udp_port: "{{ item.udp_port }}"
+          active: "{{ item.active }}"
+        validate_certs: false
+        status_code: [200, 201]
+      loop: "{{ ispconfig_firewall_writes }}"
+      loop_control:
+        label: "{{ item.name }}: tcp {{ item.tcp_port }}, udp {{ item.udp_port | default('-', true) }}"
+      changed_when: true
+  always:
+    - name: Revoke the temporary key
+      ansible.builtin.command: ispconfig-rest key:revoke {{ ispconfig_firewall_key.stdout | regex_search('#([0-9]+)', '\1') | first }}
+      changed_when: false
+      when: ispconfig_firewall_key.stdout is defined and ispconfig_firewall_key.stdout is search('#[0-9]+')

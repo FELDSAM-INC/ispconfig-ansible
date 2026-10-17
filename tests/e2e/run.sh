@@ -42,7 +42,7 @@ playbook() {
     docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(command -v docker):/usr/bin/docker:ro" \
         -v "$PWD:/repo:ro" -w /repo \
         -e ANSIBLE_CONFIG=/repo/ansible.cfg -e ANSIBLE_FORCE_COLOR=0 ispcp-ansible-controller \
-        ansible-playbook -i /repo/tests/e2e/hosts -e @/repo/tests/e2e/vars.yml site.yml
+        ansible-playbook -i /repo/tests/e2e/hosts -e @/repo/tests/e2e/vars.yml site.yml "$@"
 }
 
 echo "== First run (autoinstaller on every server; logs in $LOGS)"
@@ -79,6 +79,19 @@ echo "== ispconfig-rest and the server tools"
 on panel ispconfig-rest status
 on panel ispconfig-rest server-tools status --components database,web-logs,php-limits,dns-catalog
 on ns1 ispconfig-dns-catalog status >/dev/null || fail "dns-catalog"
+
+echo "== ISPConfig firewall records, applied with ufw on every server (the checks below run behind it)"
+[ "$(sql "SELECT COUNT(*) FROM firewall WHERE active = 'y'")" = 5 ] || fail "firewall records"
+for node in panel web1 db1 ns1 mail1; do
+    for _ in $(seq 1 36); do on "$node" ufw status | grep -qx 'Status: active' && break; sleep 5; done
+    on "$node" ufw status | grep -qx 'Status: active' || fail "ufw on $node"
+done
+on panel ufw status | grep -E '^(22|80|3306|8080|8090)/tcp +ALLOW' | grep -v v6 | awk '{print "panel:", $1}'
+on web1 ufw status | grep -qE '^40110:40210/tcp +ALLOW' || fail "FTP passive ports on web1"
+on ns1 ufw status | grep -qE '^53/udp +ALLOW' || fail "DNS on ns1"
+on mail1 ufw status | grep -qE '^993/tcp +ALLOW' || fail "IMAPS on mail1"
+on db1 ufw status | grep -qE '^3306/tcp +ALLOW' || fail "MariaDB on db1"
+[ "$(on panel ufw status | grep -cE '^(22|80|3306|8080|8090)/tcp +ALLOW +Anywhere *$')" = 5 ] || fail "panel ports"
 
 echo "== Websites on PHP 5.3 and PHP 5.6 through ISPConfig"
 key=$(on panel ispconfig-rest key:create ansible-e2e | grep -oE 'isp_[A-Za-z0-9]+' | head -n 1)
@@ -250,10 +263,24 @@ left=$(sql "SELECT COUNT(*) FROM dns_rr WHERE zone = $zone AND SUBSTR(name, 1, 1
 docker rm -f ispcp-ansible-pebble ispcp-ansible-acme >/dev/null
 
 echo "== Second run changes nothing"
+on web1 ispconfig-php-limits status >"$LOGS/php-limits-before-second.txt"
 playbook >"$LOGS/second.log" 2>&1 || { tail -n 60 "$LOGS/second.log"; fail "second run"; }
 sed -n '/PLAY RECAP/,$p' "$LOGS/second.log"
 if sed -n '/PLAY RECAP/,$p' "$LOGS/second.log" | grep -Eq 'changed=[1-9]'; then
     grep -B 3 '^changed:' "$LOGS/second.log" | head -n 40
+    echo "php-limits before the second run:"; cat "$LOGS/php-limits-before-second.txt"
+    echo "php-limits now:"; on web1 ispconfig-php-limits status
     fail "second run changed something"
 fi
+
+echo "== A PHP-FPM service php-limits does not manage yet is handed to it by the next run (php-limits installed first)"
+on web1 sh -c 'rm /etc/systemd/system/php5.3-fpm.service.d/50-ispconfig-rest-php-limits.conf && systemctl daemon-reload'
+on web1 ispconfig-php-limits status | grep -qx 'php5.3-fpm: available (service_unmanaged)' || fail "php5.3-fpm not released"
+playbook --tags web --limit web1.ispcp.test >"$LOGS/third.log" 2>&1 || { tail -n 60 "$LOGS/third.log"; fail "third run"; }
+sed -n '/TASK \[ispconfig_web : Let php-limits manage the new PHP-FPM services\]/,/^TASK/p' "$LOGS/third.log" \
+    | grep -q '^changed: .*php5\.3-fpm: available' || fail "php-limits was not given php5.3-fpm"
+on web1 ispconfig-php-limits status | grep -qx 'php5.3-fpm: managed' || fail "php5.3-fpm is not managed again"
+served=$(on web1 curl -fs -H 'Host: php53.ispcp.test' http://127.0.0.1/version.php || true)
+[[ $served == 5.3.* ]] || fail "php53.ispcp.test serves '$served' after php-limits took over"
+echo "php5.3-fpm: managed again; php53.ispcp.test: PHP $served"
 echo "PASS"
