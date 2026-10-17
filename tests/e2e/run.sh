@@ -1,15 +1,16 @@
 #!/bin/bash
-# The Ansible ISPConfig roles end to end: a panel, a web, a database and a DNS server in systemd containers, the real
-# ISPConfig autoinstaller, ispconfig-rest from GitHub and its server tools. Then websites on PHP 5.3 (built) and 5.6
-# (sury) through ISPConfig and PHP-FPM, and a second run that must change nothing. Needs Docker (cgroup v2) and
+# The Ansible ISPConfig roles end to end: a panel, a web, a database, a DNS and a mail server in systemd containers, the
+# real ISPConfig autoinstaller, ispconfig-rest from GitHub and its server tools. Then websites on PHP 5.3 (built) and
+# 5.6 (sury) through ISPConfig and PHP-FPM, a mailbox that receives mail and logs in over IMAP, and a second run that
+# must change nothing. Needs Docker (cgroup v2) and
 # internet access; takes 30-90 minutes. KEEP=1 keeps the containers, REUSE=1 runs again on kept ones; BASE=debian:12
 # tests another system.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 BASE=${BASE:-ubuntu:24.04}
 NET=ispcp-ansible
-NODES=(panel web1 db1 ns1)
-declare -A ADDRESS=([panel]=10.231.80.10 [web1]=10.231.80.11 [db1]=10.231.80.21 [ns1]=10.231.80.31)
+NODES=(panel web1 db1 ns1 mail1)
+declare -A ADDRESS=([panel]=10.231.80.10 [web1]=10.231.80.11 [db1]=10.231.80.21 [ns1]=10.231.80.31 [mail1]=10.231.80.41)
 LOGS=$(mktemp -d)
 
 cleanup() {
@@ -44,18 +45,18 @@ playbook() {
         ansible-playbook -i /repo/tests/e2e/hosts -e @/repo/tests/e2e/vars.yml site.yml
 }
 
-echo "== First run (autoinstaller on four servers; logs in $LOGS)"
+echo "== First run (autoinstaller on every server; logs in $LOGS)"
 playbook >"$LOGS/first.log" 2>&1 || { tail -n 60 "$LOGS/first.log"; fail "first run"; }
 tail -n 8 "$LOGS/first.log"
 
 echo "== ISPConfig servers and their services"
-servers=$(sql "SELECT server_name, web_server, file_server, db_server, dns_server FROM server ORDER BY server_name")
+servers=$(sql "SELECT server_name, web_server, file_server, db_server, dns_server, mail_server FROM server ORDER BY server_name")
 echo "$servers"
-expected=$(printf '%s\n' "db1.ispcp.test	0	0	1	0" "ns1.ispcp.test	0	0	0	1" "panel.ispcp.test	0	0	0	0" \
-    "web1.ispcp.test	1	1	0	0")
+expected=$(printf '%s\n' "db1.ispcp.test	0	0	1	0	0" "mail1.ispcp.test	0	0	0	0	1" "ns1.ispcp.test	0	0	0	1	0" \
+    "panel.ispcp.test	0	0	0	0	0" "web1.ispcp.test	1	1	0	0	0")
 [ "$servers" = "$expected" ] || fail "server services"
 web=$(sql "SELECT server_id FROM server WHERE server_name = 'web1.ispcp.test'")
-for node in db1 ns1 web1; do
+for node in db1 ns1 web1 mail1; do
     on "$node" grep -q "dbmaster_host'\]\s*= '10.231.80.10'" /usr/local/ispconfig/server/lib/config.inc.php || fail "$node did not join"
 done
 
@@ -119,10 +120,10 @@ on web1 sh -c 'ls /etc/php/5.3/fpm/pool.d/ | grep -q "^web[0-9]*\.conf$"' || fai
 
 echo "== MariaDB listens on the private address only where needed"
 listening() { on "$1" ss -ltnH 'sport = :3306' | awk '{print $4}' | sort | tr '\n' ' '; }
-for node in panel db1 web1 ns1; do echo "$node: $(listening "$node")"; done
+for node in panel db1 web1 ns1 mail1; do echo "$node: $(listening "$node")"; done
 [ "$(listening panel)" = "10.231.80.10:3306 127.0.0.1:3306 " ] || fail "panel MariaDB listens beyond loopback and its private address"
 [[ "$(listening db1)" =~ ^(0\.0\.0\.0|\*):3306\ $ ]] || fail "database server MariaDB does not listen on all addresses"
-for node in web1 ns1; do [ "$(listening "$node")" = "127.0.0.1:3306 " ] || fail "$node MariaDB listens beyond loopback"; done
+for node in web1 ns1 mail1; do [ "$(listening "$node")" = "127.0.0.1:3306 " ] || fail "$node MariaDB listens beyond loopback"; done
 
 echo "== Database on the database server, used by the PHP 5.3 website on the web server"
 db_server=$(sql "SELECT server_id FROM server WHERE server_name = 'db1.ispcp.test'")
@@ -152,6 +153,33 @@ chown $user: $root/web/db.php"
 connected=$(on web1 curl -fs -H 'Host: php53.ispcp.test' http://127.0.0.1/db.php || true)
 echo "PHP 5.3 website to db1.ispcp.test: $connected"
 [ "$connected" = connected ] || fail "the website cannot reach its database"
+
+echo "== Mail on the mail server: domain and mailbox through ispconfig-rest, delivery, IMAP login"
+mail_server=$(sql "SELECT server_id FROM server WHERE server_name = 'mail1.ispcp.test'")
+if [ -z "$(sql "SELECT domain_id FROM mail_domain WHERE domain = 'mail.ispcp.test'")" ]; then
+    api -X POST https://127.0.0.1:8090/api/v1/mail/domains -d "{\"server_id\":$mail_server,\"domain\":\"mail.ispcp.test\",\"client_id\":$client}" >/dev/null
+    api -X POST https://127.0.0.1:8090/api/v1/mail/users -d '{"email":"e2e@mail.ispcp.test","password":"Ansible-E2E-mail-2026!","name":"Ansible E2E","quota":104857600}' >/dev/null
+fi
+# ISPConfig's server cron on mail1 applies the mailbox within a minute or two.
+for _ in $(seq 1 30); do on mail1 doveadm user e2e@mail.ispcp.test >/dev/null 2>&1 && break; sleep 10; done
+on mail1 doveadm user e2e@mail.ispcp.test >/dev/null || fail "dovecot does not know the mailbox"
+on mail1 sh -c "printf 'Subject: ispcp-ansible-e2e\n\nhello\n' | sendmail e2e@mail.ispcp.test"
+delivered=0
+for _ in $(seq 1 30); do
+    delivered=$(on mail1 doveadm search -u e2e@mail.ispcp.test mailbox INBOX subject ispcp-ansible-e2e 2>/dev/null | wc -l)
+    [ "$delivered" -gt 0 ] && break
+    sleep 5
+done
+echo "Messages in the mailbox: $delivered"
+[ "$delivered" -gt 0 ] || fail "the message did not reach the mailbox"
+docker exec -i ispcp-ansible-panel python3 - <<'PY' || fail "IMAP login on the mail server"
+import imaplib, ssl
+client = imaplib.IMAP4('10.231.80.41')
+client.starttls(ssl_context=ssl._create_unverified_context())
+client.login('e2e@mail.ispcp.test', 'Ansible-E2E-mail-2026!')
+print('IMAP login over STARTTLS: INBOX has', client.select('INBOX')[1][0].decode(), 'messages')
+client.logout()
+PY
 
 echo "== Certificates with DNS challenges through ispconfig-rest: certbot plugin, certbot hook, acme.sh"
 dns_server=$(sql "SELECT server_id FROM server WHERE server_name = 'ns1.ispcp.test'")

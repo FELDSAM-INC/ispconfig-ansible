@@ -1,10 +1,10 @@
 # ISPConfig multiserver installation (see README.md):
 #   ansible-playbook -i hosts site.yml
 # The groups of the inventory decide what a server becomes: ispconfig_panel (ISPConfig master and ispconfig-rest),
-# ispconfig_web (web, FTP and SSH), ispconfig_db (customer databases), ispconfig_dns (primary DNS). A server may be in
-# several groups; the panel must be exactly one.
+# ispconfig_web (web, FTP and SSH), ispconfig_db (customer databases), ispconfig_dns (primary DNS), ispconfig_mail
+# (Postfix, Dovecot, Rspamd). A server may be in several groups; the panel must be exactly one.
 - name: Prepare the ISPConfig servers
-  hosts: ispconfig_panel:ispconfig_web:ispconfig_db:ispconfig_dns
+  hosts: ispconfig_panel:ispconfig_web:ispconfig_db:ispconfig_dns:ispconfig_mail
   become: true
   # Notified restarts also run when a later task fails, so a rerun does not miss them.
   force_handlers: true
@@ -28,7 +28,7 @@
 
 # The servers join the panel in parallel; set ispconfig_serial (e.g. 1) to install them one after another.
 - name: ISPConfig servers joining the panel
-  hosts: ispconfig_web:ispconfig_db:ispconfig_dns
+  hosts: ispconfig_web:ispconfig_db:ispconfig_dns:ispconfig_mail
   become: true
   # Notified restarts also run when a later task fails, so a rerun does not miss them.
   force_handlers: true
@@ -40,8 +40,8 @@
       ansible.builtin.include_role:
         name: ispconfig_server
         apply:
-          tags: [db, web, dns]
-      tags: [db, web, dns]
+          tags: [db, web, dns, mail]
+      tags: [db, web, dns, mail]
 
     - name: Database server
       ansible.builtin.include_role:

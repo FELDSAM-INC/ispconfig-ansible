@@ -1,13 +1,22 @@
 {#- Autoinstaller options of this server, as a YAML list. -#}
 {%- set web = 'web' in ispconfig_services -%}
 {%- set webserver = web or 'panel' in ispconfig_services -%}
+{%- set mail = 'mail' in ispconfig_services -%}
 - --i-know-what-i-am-doing
 - --channel={{ ispconfig_channel }}
 - --lang={{ ispconfig_language }}
 - --use-php={{ ispconfig_php_sury | join(',') }}
+{% if mail %}
+{%   if ispconfig_mail_filter == 'amavis' %}
+- --use-amavis
+{%   endif %}
+{% else %}
 - --no-mail
+{% endif %}
 - --no-mailman
+{% if not (mail and webserver and ispconfig_roundcube) %}
 - --no-roundcube
+{% endif %}
 {% if not webserver %}
 - --no-web
 {% elif ispconfig_webserver == 'nginx' %}

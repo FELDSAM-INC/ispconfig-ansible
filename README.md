@@ -9,10 +9,11 @@ adds ispconfig-rest with its server tools on the panel. The groups you put a ser
 | `ispconfig_panel` | `ispconfig_panel` | ISPConfig master: the interface (port 8080) and the master database, plus ispconfig-rest (port 8090), which installs the server tools on the other servers. It hosts nothing for customers unless it is also in another group. |
 | `ispconfig_web` | `ispconfig_web` | nginx (or Apache), PHP-FPM with the chosen PHP versions, including PHP 5.3 built from source, Pure-FTPd with a passive port range, jailkit for SSH users, quota |
 | `ispconfig_db` | `ispconfig_db` | MariaDB for customer databases, reachable by the web servers |
-| `ispconfig_dns` | `ispconfig_dns` | BIND as primary DNS, with the [catalog zone](https://github.com/FELDSAM-INC/ispconfig-rest/blob/main/dns-catalog/README.md) for secondaries |
+| `ispconfig_dns` | `ispconfig_dns` | BIND as primary DNS, with the [catalog zone](https://github.com/FELDSAM-INC/ispconfig-rest-hosting/blob/main/dns-catalog/README.md) for secondaries |
+| `ispconfig_mail` | `ispconfig_server` | Postfix, Dovecot (IMAP/POP3) and Rspamd (`ispconfig_mail_filter: amavis` for Amavis); Roundcube webmail where the server also runs a web server (`ispconfig_roundcube`) |
 
 Exactly one server is the panel. A server may be in several groups, for example web and database; the autoinstaller
-runs once with all its services. Mail is not covered.
+runs once with all its services.
 
 ## Requirements
 
@@ -50,6 +51,9 @@ db1.example.com ispconfig_address=10.0.0.21
 
 [ispconfig_dns]
 ns1.example.com ispconfig_address=10.0.0.31
+
+[ispconfig_mail]
+mail1.example.com ispconfig_address=10.0.0.41
 ```
 
 `ispconfig_address` is the address the ISPConfig servers use for each other, for example on a private network; it
@@ -59,9 +63,9 @@ defaults to the server's default IPv4 address. The playbook runs in this order:
    `/etc/hosts` on each of them. ISPConfig grants the servers' database accounts on the panel by name and address,
    so the names must resolve to these addresses everywhere.
 2. **Panel**: autoinstaller as a standalone master, then ispconfig-rest.
-3. **Servers**: all database, web and DNS servers in parallel (`ispconfig_serial: 1` installs them one by one).
+3. **Servers**: all database, web, DNS and mail servers in parallel (`ispconfig_serial: 1` installs them one by one).
    Each server joins the panel and is then visible in the ISPConfig interface.
-4. **Server tools**: the panel installs the [server tools](https://github.com/FELDSAM-INC/ispconfig-rest/blob/main/server-tools/README.md) on the servers.
+4. **Server tools**: the panel installs the [server tools](https://github.com/FELDSAM-INC/ispconfig-rest-hosting/blob/main/server-tools/README.md) on the servers.
 5. **DNS secondaries**: optional, see [DNS](#dns).
 
 A run takes 20–60 minutes per server, mostly the autoinstaller. Running the playbook again changes nothing on
@@ -223,6 +227,8 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 | `ispconfig_autoinstaller_args` | `[]` | further autoinstaller options, e.g. `--monit`, `--unattended-upgrades=autoclean`, `--ssh-harden` |
 | `ispconfig_autoinstaller_sha256` | empty | pin the autoinstaller download |
 | `ispconfig_channel` | `stable` | ISPConfig `stable` or `dev` |
+| `ispconfig_mail_filter` | `rspamd` | spam filter of the mail servers: `rspamd` or `amavis` |
+| `ispconfig_roundcube` | `true` | Roundcube webmail on mail servers that also run a web server |
 | `ispconfig_set_hostname`, `ispconfig_manage_hosts_file` | `true` | set the host name, manage `/etc/hosts` |
 | `ispconfig_rest_install` | `true` | ispconfig-rest and the server tools on the panel |
 | `ispconfig_rest_version` | `main` | branch or release tag of ispconfig-rest |

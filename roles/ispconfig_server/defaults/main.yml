@@ -58,6 +58,11 @@ ispconfig_mariadb_bind_address: >-
        if 'panel' in ispconfig_services
      else '127.0.0.1' }}
 
+# Mail servers (group ispconfig_mail): Postfix, Dovecot and the spam filter, rspamd or amavis. Roundcube webmail only
+# where the mail server also runs a web server (the panel or a web server in the same host).
+ispconfig_mail_filter: rspamd
+ispconfig_roundcube: true
+
 ispconfig_supported_os:
   - Debian 12
   - Debian 13

@@ -33,6 +33,7 @@
       - ispconfig_fqdn is match('^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.){2,}[a-z]([a-z0-9-]*[a-z0-9])?$')
       - ispconfig_ip | length > 0
       - ispconfig_webserver in ['nginx', 'apache']
+      - ispconfig_mail_filter in ['rspamd', 'amavis']
       - ispconfig_php_versions | map('string') | reject('in', ispconfig_sury_php_versions + ispconfig_built_php_versions) | list | length == 0
       - ispconfig_tools_php_version is version('8.3', '>=') and ispconfig_tools_php_version in ispconfig_sury_php_versions
       - ispconfig_ftp_passive_ports == '' or ispconfig_ftp_passive_ports is match('^[1-9][0-9]*-[1-9][0-9]*$')
@@ -46,7 +47,7 @@
       {{ (ispconfig_built_php_versions + ispconfig_sury_php_versions) | join(', ') }}.
     quiet: true
   vars:
-    ispconfig_all_servers: "{{ groups['ispconfig_panel'] | default([]) + groups['ispconfig_web'] | default([]) + groups['ispconfig_db'] | default([]) + groups['ispconfig_dns'] | default([]) }}"
+    ispconfig_all_servers: "{{ groups['ispconfig_panel'] | default([]) + groups['ispconfig_web'] | default([]) + groups['ispconfig_db'] | default([]) + groups['ispconfig_dns'] | default([]) + groups['ispconfig_mail'] | default([]) }}"
 
 # The panel's MariaDB listens on ispconfig_address: on a public address the firewall alone keeps it private.
 - name: Warn when the panel's database would listen on a public address

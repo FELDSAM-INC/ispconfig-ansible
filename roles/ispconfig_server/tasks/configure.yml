@@ -60,7 +60,7 @@
   ansible.builtin.command:
     cmd: mysql --defaults-file=/etc/mysql/debian.cnf --batch --skip-column-names dbispconfig
     stdin: |
-      UPDATE server SET web_server = {{ ispconfig_flag_web }}, file_server = {{ ispconfig_flag_web }}, db_server = {{ ispconfig_flag_db }}, dns_server = {{ ispconfig_flag_dns }} WHERE server_id = {{ ispconfig_server_id.stdout }};
+      UPDATE server SET web_server = {{ ispconfig_flag_web }}, file_server = {{ ispconfig_flag_web }}, db_server = {{ ispconfig_flag_db }}, dns_server = {{ ispconfig_flag_dns }}, mail_server = {{ ispconfig_flag_mail }} WHERE server_id = {{ ispconfig_server_id.stdout }};
       SELECT ROW_COUNT();
   delegate_to: "{{ item }}"
   loop: "{{ [ispconfig_master, inventory_hostname] | unique }}"
@@ -70,3 +70,4 @@
     ispconfig_flag_web: "{{ 1 if 'web' in ispconfig_services else 0 }}"
     ispconfig_flag_db: "{{ 1 if 'db' in ispconfig_services else 0 }}"
     ispconfig_flag_dns: "{{ 1 if 'dns' in ispconfig_services else 0 }}"
+    ispconfig_flag_mail: "{{ 1 if 'mail' in ispconfig_services else 0 }}"

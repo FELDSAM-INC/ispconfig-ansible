@@ -1,7 +1,7 @@
 # BIND secondaries for ISPConfig catalog zones
 
 [`secondary.yml`](secondary.yml) configures Debian/Ubuntu secondaries with BIND 9.18+ for the catalog zones of
-ISPConfig DNS servers that run the [dns-catalog server tool](https://github.com/FELDSAM-INC/ispconfig-rest/blob/main/dns-catalog/README.md). It reads each
+ISPConfig DNS servers that run the [dns-catalog server tool](https://github.com/FELDSAM-INC/ispconfig-rest-hosting/blob/main/dns-catalog/README.md). It reads each
 server's catalog name and key with `ispconfig-dns-catalog export`, registers the secondaries for NOTIFY there, installs
 BIND, writes the keys (root:bind 0640), the catalog zones and the `catalog-zones` block of `named.conf.options`, checks
 the configuration and reloads BIND. Running it again changes nothing; it also adds new primaries or secondaries.
