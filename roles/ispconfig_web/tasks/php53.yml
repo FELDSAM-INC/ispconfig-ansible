@@ -14,6 +14,25 @@
 - name: Build PHP 5.3 (5-15 minutes)
   when: (ispconfig_php53_built.content | default('') | b64decode | trim) != ispconfig_php53_build_id
   block:
+    - name: PHP 5.3 build support directory
+      ansible.builtin.file:
+        path: /usr/local/share/ispconfig-php53
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: PHP 5.3 security backport and regression checks
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/usr/local/share/ispconfig-php53/{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - php-5.3.29-bailout.patch
+        - verify-php53-security.sh
+
     - name: Build script
       ansible.builtin.copy:
         src: build-php53.sh
@@ -26,6 +45,8 @@
       ansible.builtin.command:
         cmd: /usr/local/sbin/ispconfig-build-php53 {{ ispconfig_php53_prefix | quote }} {{ ispconfig_php53_config_dir | quote }}
       environment:
+        PHP53_PATCH: /usr/local/share/ispconfig-php53/php-5.3.29-bailout.patch
+        PHP53_VERIFY: /usr/local/share/ispconfig-php53/verify-php53-security.sh
         PHP_URL: "{{ ispconfig_php53_sources.php.url }}"
         PHP_SHA256: "{{ ispconfig_php53_sources.php.sha256 }}"
         OPENSSL_URL: "{{ ispconfig_php53_sources.openssl.url }}"

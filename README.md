@@ -114,9 +114,25 @@ ISPConfig (System > Additional PHP Versions). Removing a version from the list d
   FPM php.ini, as the packaged command does, so the `php-limits` server tool (hosting extension 1.1.1) manages it like
   the other versions. `/usr/bin/php5.3` is its CLI, also in SSH jails (jailkit section `php5_3`). Extra php.ini
   settings: `ispconfig_php53_ini`.
-- PHP 5.3 has had no security fixes since 2014, and neither has OpenSSL 1.0.2 since 2019. Offer it only to websites
+- The build applies a local [security backport](roles/ispconfig_web/files/php-5.3.29-bailout.patch) of
+  [PHP commit 712e60f](https://github.com/php/php-src/commit/712e60f9edfd03f0960fc4fc3c2c375f42b90aa2)
+  for CVE-2026-109618 and CVE-2026-109619. It follows upstream's minimal mitigation for EOL PHP: allocation
+  failures terminate the worker immediately, and shutdown clears request-owned executor and SAPI state.
+  On memory exhaustion, PHP shutdown functions, destructors, session saving and output flushing are skipped;
+  FPM replaces the worker, and the affected request may receive an upstream error (such as HTTP 502).
+  The fatal diagnostic goes to stderr, so FPM pools need `catch_workers_output = yes` to capture it.
+- Multipart parsing retains only the first Content-Disposition and Content-Type headers. The new
+  `max_multipart_body_parts` setting defaults to `-1` (the sum of `max_input_vars` and `max_file_uploads`),
+  counts empty file controls as well as form fields, and can be set through `ispconfig_php53_ini`.
+  PHP 5.3 has no session upload-progress feature to disable. PHP 7's singleton-array optimization is not ported
+  to PHP 5's different hash table implementation.
+- PHP 5.3 has had no upstream security support since 2014, and neither has OpenSSL 1.0.2 since 2019. Offer it only to websites
   that cannot move on, and keep them isolated (PHP-FPM chroot, open_basedir).
-- It is rebuilt when its sources, the build script or the paths change. A failed build leaves the working one in place.
+- It is rebuilt when its sources, build script, security patch, verification script or paths change. The build
+  requires the patch to apply and checks OOM/overflow behavior before replacing the installed PHP.
+  A failed build leaves the working one in place. Rerun the web role (`--tags web --limit <web-host>`) to rebuild
+  existing installations and restart `php5.3-fpm`; no version-list change is needed. Existing jailkit copies of
+  `/opt/php-5.3/bin/php` also need refreshing through your jail update procedure.
 
 `ispconfig_tools_php_version` (8.3) is installed on every server: ispconfig-rest and the server tools need PHP 8.3+.
 It becomes the default `php` where the system's PHP is older (Debian 12).
@@ -264,6 +280,7 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 
 ```sh
 php tests/autoinstall-values.php   # the autoinstaller values hook (files/autoinstall.php)
+bash tests/php53-security.sh       # build patched CLI/FPM, then check OOM, multipart parsing and worker reuse
 bash tests/e2e/run.sh              # panel, web, database and DNS servers in systemd containers (Docker)
 ```
 

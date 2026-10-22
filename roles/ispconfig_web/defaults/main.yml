@@ -28,6 +28,7 @@ ispconfig_php53_build_packages:
   - curl
   - ca-certificates
   - xz-utils
+  - patch
   - dpkg-dev
   - libxml2-dev
   - libbz2-dev

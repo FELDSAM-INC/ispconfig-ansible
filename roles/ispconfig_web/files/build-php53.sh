@@ -6,7 +6,8 @@
 #
 # Usage: build-php53.sh PREFIX CONFIG_DIR   (e.g. /opt/php-5.3 /etc/php/5.3), with PHP_URL, PHP_SHA256,
 # OPENSSL_URL, OPENSSL_SHA256, CURL_URL, CURL_SHA256, LIBXML2_URL, LIBXML2_SHA256, LIBXSLT_URL and LIBXSLT_SHA256 set
-# by the ispconfig_web role. The new build replaces PREFIX
+# by the ispconfig_web role, plus PHP53_PATCH and PHP53_VERIFY pointing at the bundled security patch and checks.
+# The new build replaces PREFIX
 # only after its checks pass, so a failed build never removes a working PHP.
 set -euo pipefail
 
@@ -14,6 +15,7 @@ PREFIX=${1:?prefix}
 CONFIG_DIR=${2:?config directory}
 : "${PHP_URL:?}" "${PHP_SHA256:?}" "${OPENSSL_URL:?}" "${OPENSSL_SHA256:?}" "${CURL_URL:?}" "${CURL_SHA256:?}"
 : "${LIBXML2_URL:?}" "${LIBXML2_SHA256:?}" "${LIBXSLT_URL:?}" "${LIBXSLT_SHA256:?}"
+: "${PHP53_PATCH:?}" "${PHP53_VERIFY:?}"
 WORK=${WORK:-/usr/local/src/ispconfig-php53}
 JOBS=${JOBS:-$(nproc)}
 DEPS="$WORK/deps"
@@ -28,7 +30,7 @@ fetch() { # URL SHA256 -> extracted source directory on stdout
         echo "$2  $file.part" | sha256sum --quiet -c - >/dev/null || { echo "Checksum mismatch: $1" >&2; exit 1; }
         mv "$file.part" "$file"
     fi
-    dir=$(tar -tf "$file" | head -n 1 | cut -d/ -f1)
+    dir=$(tar -tf "$file" | sed -n '1{s,/.*,,;p;}')
     rm -rf "${WORK:?}/$dir"
     tar -C "$WORK" -xf "$file"
     echo "$WORK/$dir"
@@ -81,6 +83,8 @@ export PATH="$DEPS/bin:$PATH"
 
 src=$(fetch "$PHP_URL" "$PHP_SHA256")
 cd "$src"
+# Fail closed if the reviewed PHP 5.3.29 backport does not apply exactly to these sources.
+run php-security-patch patch --batch --forward --fuzz=0 -p1 -i "$PHP53_PATCH"
 # zlib's CRC table holds 32-bit entries; the bundled libzip reads it as 64-bit ones (wrong PKWARE decryption).
 sed -i 's/^static const uLongf \*crc = NULL;$/static const z_crc_t *crc = NULL;/' ext/zip/lib/zip_source_pkware.c
 grep -q '^static const z_crc_t \*crc = NULL;$' ext/zip/lib/zip_source_pkware.c
@@ -125,6 +129,7 @@ modules=$("$STAGE/bin/php" -n -m)
 for module in curl dom gd libxml mbstring mysql mysqli mysqlnd openssl pdo_mysql soap xsl zip; do
     grep -qx "$module" <<<"$modules" || { echo "PHP 5.3 was built without $module" >&2; exit 1; }
 done
+run php-security-check bash "$PHP53_VERIFY" "$STAGE/bin/php"
 
 rm -rf "$PREFIX.new" "$PREFIX.old"
 cp -a "$STAGE" "$PREFIX.new"

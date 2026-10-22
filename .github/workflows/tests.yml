@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Shell and PHP syntax
         run: |
-          bash -n roles/ispconfig_web/files/build-php53.sh tests/e2e/run.sh
+          for script in roles/ispconfig_web/files/*.sh tests/*.sh tests/e2e/run.sh; do bash -n "$script"; done
           php -l roles/ispconfig_server/files/autoinstall.php
       - name: Autoinstaller values hook
         run: php tests/autoinstall-values.php
@@ -23,3 +23,10 @@ jobs:
         run: |
           pipx install 'ansible-core>=2.15,<2.18'
           ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check -i hosts.example site.yml
+
+  php53-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build PHP 5.3.29 and test the security backport
+        run: bash tests/php53-security.sh
