@@ -23,6 +23,8 @@ jobs:
         run: |
           pipx install 'ansible-core>=2.15,<2.18'
           ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check -i hosts.example site.yml
+      - name: REST release upgrade and isolation migration
+        run: bash tests/rest-deployment.sh
 
   php53-security:
     runs-on: ubuntu-latest

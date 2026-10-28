@@ -77,6 +77,9 @@ on db1 test -x /usr/bin/php8.3 || fail "PHP 8.3 on db1"
 
 echo "== ispconfig-rest and the server tools"
 on panel ispconfig-rest status
+on panel systemctl is-active ispconfig-rest-web.service >/dev/null || fail "isolated REST web service"
+on panel grep -qx 'RUN_USER="ispconfig-rest"' /etc/ispconfig-rest/install.conf || fail "dedicated API identity"
+[ "$(on panel stat -c '%U %a' /run/ispconfig-rest.sock)" = 'ispconfig-rest 600' ] || fail "private API FPM socket"
 on panel ispconfig-rest server-tools status --components database,web-logs,php-limits,dns-catalog
 on ns1 ispconfig-dns-catalog status >/dev/null || fail "dns-catalog"
 

@@ -1,81 +1,218 @@
-# ispconfig-rest on the panel, with its own installer (README "Install on an ISPConfig server"). An installed API is
-# left alone: update it with `ispconfig-rest update`. API keys are created by hand: `ispconfig-rest key:create`.
+# Reapply the trusted installer when the requested release/configuration changes. Runtime Git/PHP always runs
+# as the API account; the privileged manager is refreshed from the selected upstream source before any update.
+- name: Check the REST deployment settings
+  ansible.builtin.assert:
+    that:
+      - ispconfig_rest_user is match('^[a-z_][a-z0-9_-]*$')
+      - ispconfig_rest_user not in ['root', 'www-data', 'apache', 'nginx']
+      - ispconfig_rest_version in ['main', 'develop'] or (ispconfig_rest_version is match('^v[0-9]+[.][0-9]+[.][0-9]+$') and ispconfig_rest_version[1:] is version('1.4.1', '>='))
+      - ispconfig_rest_extensions | select('match', '^hosting(@v[0-9]+[.][0-9]+[.][0-9]+)?$') | reject('equalto', 'hosting') | map('regex_replace', '^hosting@v', '') | select('version', '1.1.4', '<') | list | length == 0
+    fail_msg: Use REST 1.4.1+, hosting 1.1.4+ and a dedicated API account (or main/develop for development).
+    quiet: true
+
 - name: Check whether ispconfig-rest is installed
   ansible.builtin.stat:
-    path: /usr/local/bin/ispconfig-rest
+    path: /etc/ispconfig-rest/install.conf
+    follow: false
   register: ispconfig_rest_installed
 
-# ispconfig-rest runs on ispconfig_tools_php_version, whatever the system's default PHP is (8.5 on Ubuntu 26.04).
-# The autoinstaller's PHP modules lack bcmath.
+- name: Validate the installed manager registry
+  ansible.builtin.assert:
+    that:
+      - ispconfig_rest_installed.stat.isreg | default(false)
+      - ispconfig_rest_installed.stat.uid == 0
+      - ispconfig_rest_installed.stat.mode == '0600'
+    fail_msg: The existing /etc/ispconfig-rest/install.conf must be a root-owned regular file with mode 0600.
+    quiet: true
+  when: ispconfig_rest_installed.stat.exists
+
+- name: Read the installed manager registry
+  ansible.builtin.slurp:
+    src: /etc/ispconfig-rest/install.conf
+  register: ispconfig_rest_registry
+  when: ispconfig_rest_installed.stat.exists
+
+- name: Read the existing REST identity and extensions
+  ansible.builtin.set_fact:
+    ispconfig_rest_previous_user: "{{ (registry | regex_findall('(?m)^RUN_USER=\"([^\"]+)\"$') | first) | default(ispconfig_rest_user) }}"
+    ispconfig_rest_previous_dir: "{{ (registry | regex_findall('(?m)^INSTALL_DIR=\"([^\"]+)\"$') | first) | default(ispconfig_rest_dir) }}"
+    ispconfig_rest_existing_extensions: "{{ ((registry | regex_findall('(?m)^EXTENSIONS=\"([^\"]*)\"$') | first) | default('')).split() }}"
+    ispconfig_rest_previous_timezone: "{{ ((registry | regex_findall('(?m)^TIMEZONE=\"([^\"]*)\"$') | first) | default('')) if 'TIMEZONE_MODE=\"explicit\"' in registry else '' }}"
+    ispconfig_rest_missing_extensions: []
+  vars:
+    registry: "{{ ispconfig_rest_registry.content | default('') | b64decode }}"
+
+- name: Keep the existing installation directory
+  ansible.builtin.assert:
+    that: ispconfig_rest_previous_dir == ispconfig_rest_dir
+    fail_msg: Set ispconfig_rest_dir to the existing installation path; this role does not relocate data.
+    quiet: true
+
+- name: Select extensions that still need installing
+  ansible.builtin.set_fact:
+    ispconfig_rest_missing_extensions: "{{ ispconfig_rest_missing_extensions + [item] }}"
+  loop: "{{ ispconfig_rest_extensions }}"
+  when: item.split('@')[0] not in ispconfig_rest_existing_extensions
+
 - name: PHP of ispconfig-rest
   ansible.builtin.apt:
     name: "{{ ['cli', 'fpm', 'bcmath', 'mbstring', 'mysql', 'xml'] | map('regex_replace', '^', 'php' ~ ispconfig_php_tools ~ '-') | list }}"
 
-- name: Install ispconfig-rest
-  when: not ispconfig_rest_installed.stat.exists
+- name: Private REST deployment files
+  ansible.builtin.file:
+    path: /root/ispconfig-rest-ansible
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Download the ispconfig-rest installer
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/{{ ispconfig_rest_repository }}/{{ ispconfig_rest_version }}/install.sh
+    dest: /root/ispconfig-rest-ansible/install.sh
+    owner: root
+    group: root
+    mode: '0700'
+    force: true
+    checksum: "{{ 'sha256:8bfb8a12edaf652f8ba3c50524896b0723b5db6b71ff00905c0e6619180bc812' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.1' else omit }}"
+  register: ispconfig_rest_download
+
+- name: Fingerprint the downloaded installer
+  ansible.builtin.stat:
+    path: /root/ispconfig-rest-ansible/install.sh
+    checksum_algorithm: sha256
+  register: ispconfig_rest_installer_file
+
+- name: Read the last successful REST deployment
+  ansible.builtin.slurp:
+    src: /etc/ispconfig-rest/ansible-deployment.json
+  register: ispconfig_rest_deployed
+  failed_when: false
+
+- name: Desired REST deployment
+  ansible.builtin.set_fact:
+    ispconfig_rest_deployment: >-
+      {{ {'version': ispconfig_rest_version, 'repository': ispconfig_rest_repository,
+          'installer': ispconfig_rest_installer_file.stat.checksum, 'user': ispconfig_rest_user,
+          'directory': ispconfig_rest_dir, 'php': ispconfig_php_tools, 'web': ispconfig_httpd,
+          'port': ispconfig_rest_port, 'url': ispconfig_rest_url, 'extensions': ispconfig_rest_extensions | sort} | to_json }}
+
+- name: Install or upgrade ispconfig-rest
+  when: >-
+    not ispconfig_rest_installed.stat.exists or ispconfig_rest_reconfigure | bool
+    or ispconfig_rest_previous_user != ispconfig_rest_user
+    or (ispconfig_rest_deployed.content | default('') | b64decode | trim) != ispconfig_rest_deployment
   block:
-    - name: Download the ispconfig-rest installer
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/{{ ispconfig_rest_repository }}/{{ ispconfig_rest_version }}/install.sh
-        dest: /root/ispconfig-rest-install.sh
+    - name: Dedicated REST runtime account
+      ansible.builtin.user:
+        name: "{{ ispconfig_rest_user }}"
+        system: true
+        home: "{{ ispconfig_rest_dir }}"
+        create_home: false
+        shell: /usr/sbin/nologin
+
+    - name: Install the ownership migration helper
+      ansible.builtin.copy:
+        src: migrate-runtime-owner.py
+        dest: /root/ispconfig-rest-ansible/migrate-runtime-owner.py
         owner: root
         group: root
-        mode: "0700"
-        force: true
+        mode: '0700'
+      when: ispconfig_rest_installed.stat.exists and ispconfig_rest_previous_user != ispconfig_rest_user
 
-    # The autoinstaller gives MariaDB's root a password and keeps it in debian.cnf; the installer needs it to
-    # create the API's own table.
-    - name: Read the MariaDB root password
+    - name: Transfer the existing checkout to the dedicated account
+      ansible.builtin.command:
+        argv: [python3, /root/ispconfig-rest-ansible/migrate-runtime-owner.py, "{{ ispconfig_rest_dir }}", "{{ ispconfig_rest_previous_user }}", "{{ ispconfig_rest_user }}"]
+      when: ispconfig_rest_installed.stat.exists and ispconfig_rest_previous_user != ispconfig_rest_user
+      changed_when: true
+
+    - name: Register the dedicated runtime account before running PHP or Git
+      ansible.builtin.lineinfile:
+        path: /etc/ispconfig-rest/install.conf
+        regexp: '^RUN_USER='
+        line: 'RUN_USER="{{ ispconfig_rest_user }}"'
+      when: ispconfig_rest_installed.stat.exists
+
+    - name: Refresh the privileged manager from the selected upstream source
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/{{ ispconfig_rest_repository }}/{{ ispconfig_rest_version }}/bin/ispconfig-rest
+        dest: /usr/local/bin/ispconfig-rest
+        owner: root
+        group: root
+        mode: '0755'
+        force: true
+        checksum: "{{ 'sha256:dcf6a07b9dade1449373b3267141c259c80a5704b5b30036f5c64d7f66c1e42a' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.1' else omit }}"
+      when: ispconfig_rest_installed.stat.exists
+
+    # The installer verifies existing extension revisions before its privileged migrations. Bring each one to
+    # its trusted ref first; passing an already installed extension to install.sh would fail as a duplicate.
+    - name: Update registered extensions with the trusted manager
+      ansible.builtin.command:
+        argv: >-
+          {{ ['/usr/local/bin/ispconfig-rest', 'extension:update', item]
+             + ([('--tag' if selected_ref is match('^v[0-9]+[.][0-9]+[.][0-9]+') else '--branch'), selected_ref] if selected_ref else []) }}
+      vars:
+        selected: "{{ (ispconfig_rest_extensions | select('match', '^' ~ item ~ '(@|$)') | first) | default('') }}"
+        selected_ref: "{{ selected.split('@')[1] if '@' in selected else ('main' if selected else '') }}"
+      loop: "{{ ispconfig_rest_existing_extensions }}"
+      changed_when: true
+
+    - name: Read the MariaDB migration password
       ansible.builtin.command: sed -n 's/^password[[:space:]]*=[[:space:]]*//p' /etc/mysql/debian.cnf
       register: ispconfig_rest_db_admin
       changed_when: false
       no_log: true
 
+    - name: Private password file for the installer
+      ansible.builtin.copy:
+        dest: /root/ispconfig-rest-ansible/db-admin-password
+        content: "{{ ispconfig_rest_db_admin.stdout_lines[0] | default('') }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
     - name: Run the ispconfig-rest installer
       ansible.builtin.command:
-        argv: "{{ ['bash', '/root/ispconfig-rest-install.sh'] + ispconfig_rest_extensions | map('regex_replace', '^', '--extension ') | map('split', ' ') | flatten }}"
+        argv: "{{ ['bash', '/root/ispconfig-rest-ansible/install.sh', '--db-admin-pass-file', '/root/ispconfig-rest-ansible/db-admin-password'] + ispconfig_rest_missing_extensions | map('regex_replace', '^', '--extension ') | map('split', ' ') | flatten }}"
       environment:
-        ISPC_REST_NONINTERACTIVE: "1"
+        ISPC_REST_NONINTERACTIVE: '1'
         ISPC_REST_PHP: /usr/bin/php{{ ispconfig_php_tools }}
-        ISPC_REST_CREATE_KEY: "no"
+        ISPC_REST_CREATE_KEY: 'no'
         ISPC_REST_REPO: https://github.com/{{ ispconfig_rest_repository }}.git
         ISPC_REST_BRANCH: "{{ ispconfig_rest_version }}"
+        ISPC_REST_DIR: "{{ ispconfig_rest_dir }}"
+        ISPC_REST_USER: "{{ ispconfig_rest_user }}"
         ISPC_REST_PORT: "{{ ispconfig_rest_port | string }}"
         ISPC_REST_SERVE: "{{ ispconfig_httpd }}"
         ISPC_REST_URL: "{{ ispconfig_rest_url }}"
-        ISPC_REST_DB_ADMIN_PASS: "{{ ispconfig_rest_db_admin.stdout_lines[0] | default('') }}"
-      register: ispconfig_rest_installer
-      failed_when: false
+        ISPC_REST_TIMEZONE: "{{ ispconfig_rest_previous_timezone }}"
       changed_when: true
       no_log: true
 
-    - name: Check the ispconfig-rest installation
-      ansible.builtin.fail:
-        msg: "{{ (ispconfig_rest_installer.stdout_lines + ispconfig_rest_installer.stderr_lines)[-40:] }}"
-      when: ispconfig_rest_installer.rc != 0
+    - name: Check the isolated API web service
+      ansible.builtin.command: systemctl is-active ispconfig-rest-web.service
+      changed_when: false
+
+    - name: Check database access and migrations as the API account
+      ansible.builtin.command: /usr/local/bin/ispconfig-rest artisan migrate:status
+      changed_when: false
+      no_log: true
+
+    - name: Record the successful REST deployment
+      ansible.builtin.copy:
+        dest: /etc/ispconfig-rest/ansible-deployment.json
+        content: "{{ ispconfig_rest_deployment }}\n"
+        owner: root
+        group: root
+        mode: '0600'
   always:
-    - name: Remove the ispconfig-rest installer
+    - name: Remove the migration password file
       ansible.builtin.file:
-        path: /root/ispconfig-rest-install.sh
+        path: /root/ispconfig-rest-ansible/db-admin-password
         state: absent
-
-# Extensions added to the list later, also on an API installed before; installed ones are updated with
-# `ispconfig-rest update`.
-- name: Read the installed extensions
-  ansible.builtin.command: sed -n 's/^EXTENSIONS="\(.*\)"$/\1/p' /etc/ispconfig-rest/install.conf
-  register: ispconfig_rest_installed_extensions
-  changed_when: false
-
-- name: Install ispconfig-rest extensions
-  ansible.builtin.command:
-    argv: >-
-      {{ ['/usr/local/bin/ispconfig-rest', 'extension:install', item.split('@')[0]]
-         + ([] if '@' not in item else [('--tag' if item.split('@')[1] is match('^v[0-9]+[.][0-9]+[.][0-9]+') else '--branch'), item.split('@')[1]]) }}
-  loop: "{{ ispconfig_rest_extensions }}"
-  when: item.split('@')[0] not in ispconfig_rest_installed_extensions.stdout.split()
-  changed_when: true
+      no_log: true
 
 - name: Check ispconfig-rest
   ansible.builtin.command: /usr/local/bin/ispconfig-rest status
-  register: ispconfig_rest_status
   changed_when: false

@@ -2,3 +2,4 @@
 /group_vars/*.yml
 !/group_vars/all.example.yml
 /host_vars/
+__pycache__/

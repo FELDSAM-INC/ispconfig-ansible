@@ -68,8 +68,8 @@ defaults to the server's default IPv4 address. The playbook runs in this order:
 4. **Server tools**: the panel installs the [server tools](https://github.com/FELDSAM-INC/ispconfig-rest-hosting/blob/main/server-tools/README.md) on the servers.
 5. **DNS secondaries**: optional, see [DNS](#dns).
 
-A run takes 20–60 minutes per server, mostly the autoinstaller. Running the playbook again changes nothing on
-installed servers and adds new ones; tags `panel`, `web`, `db`, `dns`, `tools` and `secondaries` limit a run.
+A run takes 20–60 minutes per server, mostly the autoinstaller. Running the playbook again applies changed REST releases/configuration, refreshes affected server tools and
+adds new servers; an unchanged successful deployment is left in place; tags `panel`, `web`, `db`, `dns`, `tools` and `secondaries` limit a run.
 
 ## How the servers join the panel
 
@@ -139,15 +139,36 @@ It becomes the default `php` where the system's PHP is older (Debian 12).
 
 ## The panel and ispconfig-rest
 
-ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended) from
-`ispconfig_rest_version` (`main` follows the releases; a tag pins one, 1.1.0 or newer for extensions; earlier
-installers than 1.0.7 stop on a new panel, which has no ISPConfig firewall record yet). An installed API is not touched again;
-update it with `ispconfig-rest update`. API keys are not created; mint one with `sudo ispconfig-rest key:create "WHMCS"`.
+ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended).
+The defaults pin **REST v1.4.1** and **hosting v1.1.4**. The API runs as the dedicated `ispconfig-rest` account,
+with `ispconfig-rest-web.service` and a private PHP-FPM socket; customer websites keep their existing web server.
+Installer and manager downloads for v1.4.1 are checked against their SHA-256 digests. Migration credentials are
+passed in a root-only password file, removed even when installation fails. API keys are not created;
+mint one with `sudo ispconfig-rest key:create "WHMCS"`.
 
-`ispconfig_rest_extensions` lists its extensions (`NAME` or `NAME@REF`, a branch or a `vX.Y.Z` release; default
-`main`). The default `[hosting]` installs [ispconfig-rest-hosting](https://github.com/FELDSAM-INC/ispconfig-rest-hosting),
-which provides the hosting features and the server tools; ispconfig-rest 1.1 or newer. Extensions added to the list
-later are installed on the next run; `ispconfig-rest update` updates them with the API.
+The role manages existing installations too. On the first run after this change, or when the selected release or
+configuration changes, it refreshes the privileged manager, updates registered extensions, and reapplies the
+installer. A legacy checkout owned by `www-data` is transferred to the dedicated account without following
+symlinks or changing hard-linked/foreign-owned files. The installer preserves `APP_KEY`; API keys and application
+metadata stay in the database. It regenerates `.env` from ISPConfig and the inventory, so back up any custom
+settings first. A root runtime DB login must be replaced with a limited ISPConfig account before upgrading.
+
+For an existing inventory, change old version overrides to the new pins and run:
+
+```sh
+ansible-playbook -i hosts site.yml --tags panel,tools --ask-vault-pass
+```
+
+Back up the application and ISPConfig database before this maintenance run; moving the runtime identity and
+restarting the API causes a short interruption. The role refuses unknown file ownership, hard links, unsafe
+installation ancestors or a changed install path so they can be resolved explicitly. Existing backup filesystem
+access must be granted to the dedicated API identity; it must never execute customer code.
+
+`ispconfig_rest_extensions` lists extensions as `NAME` or `NAME@REF` (the default is `[hosting@v1.1.4]`). Added
+extensions are installed; existing ones are updated to their selected ref. Extensions omitted from the list are
+preserved on their registered channel. Use REST 1.4.1+ and hosting 1.1.4+. `main`/`develop` remain available for
+development; use `ispconfig_rest_reconfigure: true` for a one-off refresh of a moving branch, then unset it.
+For pinned releases, `ispconfig-rest update` stays on the registered tag; select a newer tag in the inventory to upgrade.
 
 With the hosting extension, the panel's root gets its own SSH key (`/root/.ssh/ispconfig-tools`). Its public key is authorized for root on each
 server, from the panel's address only. The servers' host keys are read through Ansible's connection, so
@@ -161,8 +182,9 @@ and `waf` by default (`ispconfig_rest_server_tools`), plus:
   restarts each such PHP-FPM service once),
 - `dns-catalog` on the DNS servers (`ispconfig_rest_dns_catalog`),
 
-They are installed again only when the servers or components change. Later updates: `ispconfig-rest server-tools
-update`.
+They are installed again when the servers, components, hosting release or file-manager settings change. This
+refreshes existing database workers with the hosting 1.1.4 SQL-output fix. Manual refresh: `ispconfig-rest server-tools
+update`. Run both `panel` and `tools` tags for a complete release upgrade.
 
 ## DNS
 
@@ -265,9 +287,12 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 | `ispconfig_roundcube` | `true` | Roundcube webmail on mail servers that also run a web server |
 | `ispconfig_set_hostname`, `ispconfig_manage_hosts_file` | `true` | set the host name, manage `/etc/hosts` |
 | `ispconfig_rest_install` | `true` | ispconfig-rest and the server tools on the panel |
-| `ispconfig_rest_version` | `main` | branch or release tag of ispconfig-rest |
+| `ispconfig_rest_version` | `v1.4.1` | managed REST release (1.4.1+), or main/develop |
+| `ispconfig_rest_user` | `ispconfig-rest` | dedicated API web/FPM and checkout account |
+| `ispconfig_rest_dir` | `/opt/ispconfig-rest` | installation path; must match an existing deployment |
+| `ispconfig_rest_reconfigure` | `false` | one-off installer and worker refresh, including moving branches |
 | `ispconfig_rest_port` | `8090` | HTTPS port of ispconfig-rest |
-| `ispconfig_rest_extensions` | `[hosting]` | extensions of ispconfig-rest, `NAME` or `NAME@REF` |
+| `ispconfig_rest_extensions` | `[hosting@v1.1.4]` | extensions of ispconfig-rest, `NAME` or `NAME@REF` |
 
 ## After ISPConfig updates
 
@@ -280,6 +305,7 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 
 ```sh
 php tests/autoinstall-values.php   # the autoinstaller values hook (files/autoinstall.php)
+bash tests/rest-deployment.sh      # disposable container: install, legacy identity migration, repeat and failure cleanup
 bash tests/php53-security.sh       # build patched CLI/FPM, then check OOM, multipart parsing and worker reuse
 bash tests/e2e/run.sh              # panel, web, database and DNS servers in systemd containers (Docker)
 ```
