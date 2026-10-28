@@ -5,9 +5,9 @@
     that:
       - ispconfig_rest_user is match('^[a-z_][a-z0-9_-]*$')
       - ispconfig_rest_user not in ['root', 'www-data', 'apache', 'nginx']
-      - ispconfig_rest_version in ['main', 'develop'] or (ispconfig_rest_version is match('^v[0-9]+[.][0-9]+[.][0-9]+$') and ispconfig_rest_version[1:] is version('1.4.1', '>='))
+      - ispconfig_rest_version in ['main', 'develop'] or (ispconfig_rest_version is match('^v[0-9]+[.][0-9]+[.][0-9]+$') and ispconfig_rest_version[1:] is version('1.4.2', '>='))
       - ispconfig_rest_extensions | select('match', '^hosting(@v[0-9]+[.][0-9]+[.][0-9]+)?$') | reject('equalto', 'hosting') | map('regex_replace', '^hosting@v', '') | select('version', '1.1.4', '<') | list | length == 0
-    fail_msg: Use REST 1.4.1+, hosting 1.1.4+ and a dedicated API account (or main/develop for development).
+    fail_msg: Use REST 1.4.2+, hosting 1.1.4+ and a dedicated API account (or main/develop for development).
     quiet: true
 
 - name: Check whether ispconfig-rest is installed
@@ -74,7 +74,7 @@
     group: root
     mode: '0700'
     force: true
-    checksum: "{{ 'sha256:8bfb8a12edaf652f8ba3c50524896b0723b5db6b71ff00905c0e6619180bc812' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.1' else omit }}"
+    checksum: "{{ 'sha256:3eac22a50a9b6c5005c0e5001485ec4835ebacbc9f61c8f43e540e5d98d7da1e' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.2' else omit }}"
   register: ispconfig_rest_download
 
 - name: Fingerprint the downloaded installer
@@ -141,7 +141,7 @@
         group: root
         mode: '0755'
         force: true
-        checksum: "{{ 'sha256:dcf6a07b9dade1449373b3267141c259c80a5704b5b30036f5c64d7f66c1e42a' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.1' else omit }}"
+        checksum: "{{ 'sha256:dcf6a07b9dade1449373b3267141c259c80a5704b5b30036f5c64d7f66c1e42a' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.2' else omit }}"
       when: ispconfig_rest_installed.stat.exists
 
     # The installer verifies existing extension revisions before its privileged migrations. Bring each one to
@@ -190,28 +190,53 @@
       changed_when: true
       no_log: true
 
-    - name: Check the isolated API web service
-      ansible.builtin.command: systemctl is-active ispconfig-rest-web.service
-      changed_when: false
-
-    - name: Check database access and migrations as the API account
-      ansible.builtin.command: /usr/local/bin/ispconfig-rest artisan migrate:status
-      changed_when: false
-      no_log: true
-
-    - name: Record the successful REST deployment
-      ansible.builtin.copy:
-        dest: /etc/ispconfig-rest/ansible-deployment.json
-        content: "{{ ispconfig_rest_deployment }}\n"
-        owner: root
-        group: root
-        mode: '0600'
   always:
     - name: Remove the migration password file
       ansible.builtin.file:
         path: /root/ispconfig-rest-ansible/db-admin-password
         state: absent
       no_log: true
+
+# Check the serving path on every run, including deployments whose state marker is already current.
+# systemctl is-active alone cannot detect a web worker denied access to the FPM socket.
+- name: Check the isolated API web service
+  ansible.builtin.command: systemctl is-active ispconfig-rest-web.service
+  changed_when: false
+
+- name: Check database access and migrations as the API account
+  ansible.builtin.command: /usr/local/bin/ispconfig-rest artisan migrate:status
+  changed_when: false
+  no_log: true
+
+- name: Check whether the panel certificate is its own trust anchor
+  ansible.builtin.command:
+    argv: [openssl, verify, -CAfile, /usr/local/ispconfig/interface/ssl/ispserver.crt, /usr/local/ispconfig/interface/ssl/ispserver.crt]
+  register: ispconfig_rest_local_certificate
+  changed_when: false
+  failed_when: false
+
+- name: Verify the API responds over HTTPS
+  ansible.builtin.uri:
+    url: "{{ (ispconfig_rest_url or ('https://' ~ ispconfig_fqdn ~ ':' ~ ispconfig_rest_port)) | regex_replace('/$', '') }}/up"
+    status_code: 200
+    follow_redirects: none
+    use_proxy: false
+    validate_certs: true
+    # Trust the installed self-signed panel certificate; otherwise use the system CA store.
+    ca_path: "{{ '/usr/local/ispconfig/interface/ssl/ispserver.crt' if ispconfig_rest_local_certificate.rc == 0 else omit }}"
+    timeout: 10
+  register: ispconfig_rest_http
+  until: ispconfig_rest_http.status | default(0) == 200
+  retries: 10
+  delay: 2
+
+- name: Record the successful REST deployment
+  ansible.builtin.copy:
+    dest: /etc/ispconfig-rest/ansible-deployment.json
+    content: "{{ ispconfig_rest_deployment }}\n"
+    owner: root
+    group: root
+    mode: '0600'
 
 - name: Check ispconfig-rest
   ansible.builtin.command: /usr/local/bin/ispconfig-rest status

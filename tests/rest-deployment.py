@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import ssl
 import subprocess
 import tempfile
 import threading
@@ -74,8 +75,24 @@ class DeploymentTests(unittest.TestCase):
         class Handler(SimpleHTTPRequestHandler):
             def __init__(self,*args,**kwargs):super().__init__(*args,directory=str(fixtures),**kwargs)
             def log_message(self,*args):pass
+            def do_GET(self):
+                if self.path=='/up':
+                    self.send_response(503 if (fixtures/'http-failure').exists() else 200)
+                    self.end_headers();self.wfile.write(b'health fixture');return
+                super().do_GET()
         cls.http=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         threading.Thread(target=cls.http.serve_forever,daemon=True).start()
+        certificate=Path('/usr/local/ispconfig/interface/ssl/ispserver.crt')
+        certificate.parent.mkdir(parents=True,exist_ok=True)
+        key=cls.work/'health.key'
+        subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+                        '-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost',
+                        '-keyout',str(key),'-out',str(certificate)],check=True,capture_output=True)
+        cls.https=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(certificate),str(key))
+        cls.https.socket=context.wrap_socket(cls.https.socket,server_side=True)
+        threading.Thread(target=cls.https.serve_forever,daemon=True).start()
         tasks=yaml.safe_load((cls.role/'tasks/rest.yml').read_text())
         def adapt(tasks):
             for task in tasks:
@@ -86,6 +103,9 @@ class DeploymentTests(unittest.TestCase):
                     module['url']='http://127.0.0.1:'+str(cls.http.server_port)+'/'+kind
                     module['checksum']='sha256:'+hashlib.sha256((fixtures/kind).read_bytes()).hexdigest()
                 if task.get('name')=='Run the ispconfig-rest installer':task['environment']['REST_TEST_FAIL']="{{ rest_test_fail | default('no') }}"
+                if 'ansible.builtin.uri' in task:
+                    task['ansible.builtin.uri']['url']='https://localhost:'+str(cls.https.server_port)+'/up'
+                    task['retries']=1;task['delay']=0
                 for key in ['block','always']:adapt(task.get(key,[]))
         adapt(tasks)
         (cls.role/'tasks/rest.yml').write_text(yaml.safe_dump(tasks,sort_keys=False))
@@ -98,13 +118,14 @@ class DeploymentTests(unittest.TestCase):
         Path('/etc/mysql/debian.cnf').write_text('[client]\npassword = '+SECRET+'\n')
 
     @classmethod
-    def tearDownClass(cls):cls.http.shutdown();shutil.rmtree(cls.work)
+    def tearDownClass(cls):cls.http.shutdown();cls.https.shutdown();shutil.rmtree(cls.work)
 
     def setUp(self):
         for p in ['/opt/ispconfig-rest','/etc/ispconfig-rest','/root/ispconfig-rest-ansible']:
             shutil.rmtree(p,ignore_errors=True)
         Path('/usr/local/bin/ispconfig-rest').unlink(missing_ok=True)
         CALLS.unlink(missing_ok=True)
+        Path('/tmp/rest-fixtures/http-failure').unlink(missing_ok=True)
 
     def run_play(self,values=None,success=True):
         extra=self.work/'extra.json';extra.write_text(json.dumps(values or {}))
@@ -152,7 +173,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue(Path('/etc/ispconfig-rest/ansible-deployment.json').exists())
 
     def test_old_release_and_shared_runtime_are_rejected(self):
-        for values in [{'ispconfig_rest_version':'v1.4.0'},{'ispconfig_rest_extensions':['hosting@v1.1.3']},{'ispconfig_rest_user':'www-data'}]:
+        for values in [{'ispconfig_rest_version':'v1.4.0'},{'ispconfig_rest_version':'v1.4.1'},{'ispconfig_rest_extensions':['hosting@v1.1.3']},{'ispconfig_rest_user':'www-data'}]:
             with self.subTest(values=values):self.run_play(values,success=False)
         self.assertFalse(CALLS.exists())
 
@@ -160,10 +181,20 @@ class DeploymentTests(unittest.TestCase):
         self.run_play()
         marker=Path('/etc/ispconfig-rest/ansible-deployment.json')
         previous=marker.read_text()
-        self.run_play({'ispconfig_rest_version':'v1.4.2','rest_test_fail':'yes'},success=False)
+        self.run_play({'ispconfig_rest_version':'v1.4.3','rest_test_fail':'yes'},success=False)
         self.assertEqual(marker.read_text(),previous)
-        self.run_play({'ispconfig_rest_version':'v1.4.2'})
-        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.2')
+        self.run_play({'ispconfig_rest_version':'v1.4.3'})
+        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.3')
+
+    def test_active_service_with_failed_http_does_not_mark_deployment_successful(self):
+        Path('/tmp/rest-fixtures/http-failure').touch()
+        self.run_play(success=False)
+        self.assertFalse(Path('/etc/ispconfig-rest/ansible-deployment.json').exists())
+        Path('/tmp/rest-fixtures/http-failure').unlink()
+        self.run_play()
+        self.assertTrue(Path('/etc/ispconfig-rest/ansible-deployment.json').exists())
+        Path('/tmp/rest-fixtures/http-failure').touch()
+        self.run_play(success=False)
 
 
 if __name__=='__main__':unittest.main()

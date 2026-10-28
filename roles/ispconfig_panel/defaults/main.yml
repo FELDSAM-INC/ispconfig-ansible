@@ -1,7 +1,7 @@
 # ispconfig-rest on the panel: https://<panel>:8090, installed with its install.sh from GitHub.
 ispconfig_rest_install: true
 # Changing the selected release/configuration reapplies the installer, including existing installations.
-ispconfig_rest_version: v1.4.1
+ispconfig_rest_version: v1.4.2
 ispconfig_rest_repository: FELDSAM-INC/ispconfig-rest
 ispconfig_rest_user: ispconfig-rest
 ispconfig_rest_dir: /opt/ispconfig-rest

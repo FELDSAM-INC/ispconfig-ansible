@@ -17,7 +17,7 @@ ispconfig_ssl_cert:
   email: admin@example.com
 
 # ispconfig-rest on the panel and its server tools
-ispconfig_rest_version: v1.4.1
+ispconfig_rest_version: v1.4.2
 ispconfig_rest_extensions: [hosting@v1.1.4]
 ispconfig_rest_user: ispconfig-rest
 ispconfig_rest_server_tools: [database, web-logs, waf]
