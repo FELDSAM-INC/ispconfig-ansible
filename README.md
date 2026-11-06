@@ -140,7 +140,7 @@ It becomes the default `php` where the system's PHP is older (Debian 12).
 ## The panel and ispconfig-rest
 
 ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended).
-The defaults pin **REST v1.4.2** and **hosting v1.1.4**. The API runs as the dedicated `ispconfig-rest` account,
+The defaults pin **REST v1.4.2** and **hosting v1.2.0**. The API runs as the dedicated `ispconfig-rest` account,
 with `ispconfig-rest-web.service` and a private PHP-FPM socket; customer websites keep their existing web server.
 Installer and manager downloads for v1.4.2 are checked against their SHA-256 digests. Migration credentials are
 passed in a root-only password file, removed even when installation fails. The role checks `/up` over HTTPS
@@ -166,7 +166,7 @@ restarting the API causes a short interruption. The role refuses unknown file ow
 installation ancestors or a changed install path so they can be resolved explicitly. Existing backup filesystem
 access must be granted to the dedicated API identity; it must never execute customer code.
 
-`ispconfig_rest_extensions` lists extensions as `NAME` or `NAME@REF` (the default is `[hosting@v1.1.4]`). Added
+`ispconfig_rest_extensions` lists extensions as `NAME` or `NAME@REF` (the default is `[hosting@v1.2.0]`). Added
 extensions are installed; existing ones are updated to their selected ref. Extensions omitted from the list are
 preserved on their registered channel. Use REST 1.4.2+ and hosting 1.1.4+. `main`/`develop` remain available for
 development; use `ispconfig_rest_reconfigure: true` for a one-off refresh of a moving branch, then unset it.
@@ -294,7 +294,7 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 | `ispconfig_rest_dir` | `/opt/ispconfig-rest` | installation path; must match an existing deployment |
 | `ispconfig_rest_reconfigure` | `false` | one-off installer and worker refresh, including moving branches |
 | `ispconfig_rest_port` | `8090` | HTTPS port of ispconfig-rest |
-| `ispconfig_rest_extensions` | `[hosting@v1.1.4]` | extensions of ispconfig-rest, `NAME` or `NAME@REF` |
+| `ispconfig_rest_extensions` | `[hosting@v1.2.0]` | extensions of ispconfig-rest, `NAME` or `NAME@REF` |
 
 ## After ISPConfig updates
 
@@ -302,6 +302,16 @@ and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
   its password.
 - If an update reconfigures services, it also rewrites `/etc/jailkit/jk_init.ini`. Run the playbook again to restore
   the PHP 5.3 jail section. If the update detects services and proposes to change them, keep the ones you have.
+
+## Migrate old websites into WHMCS-created accounts
+
+After manually changing the WHMCS product and running **Create**, use
+the hosting extension's [migration server tool](https://github.com/FELDSAM-INC/ispconfig-rest-hosting/tree/main/site-migration)
+to provision the site's domain and databases under that existing ISPConfig client and copy files and SQL.
+It requires hosting v1.2.0+; update older installations with `sudo ispconfig-rest extension:update hosting --tag v1.2.0`.
+Install it from the REST panel with `sudo ispconfig-rest server-tools install --components migration --server 4`
+(replace `4` with the destination web server ID). After its one-time connection setup, run
+`ispcp-migrate example.com 123` on that web server; `123` is the new ISPConfig client ID.
 
 ## Tests
 

@@ -147,8 +147,8 @@ class DeploymentTests(unittest.TestCase):
         self.run_play()
         self.assertEqual(len([x for x in self.calls() if x[0]=='installer']),1)
         self.assertEqual(len([x for x in self.calls() if x[0]=='server-tools']),1)
-        self.run_play({'ispconfig_rest_extensions':['hosting@v1.1.5']})
-        self.assertIn(['extension:update','hosting','--tag','v1.1.5'],self.calls())
+        self.run_play({'ispconfig_rest_extensions':['hosting@v1.2.1']})
+        self.assertIn(['extension:update','hosting','--tag','v1.2.1'],self.calls())
         self.assertEqual(len([x for x in self.calls() if x[0]=='server-tools']),2)
         self.assertNotIn('--extension',[x for x in self.calls() if x[0]=='installer'][-1][1])
 
