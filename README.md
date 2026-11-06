@@ -146,9 +146,9 @@ It becomes the default `php` where the system's PHP is older (Debian 12).
 ## The panel and ispconfig-rest
 
 ispconfig-rest is installed with its own [installer](https://github.com/FELDSAM-INC/ispconfig-rest#install-on-an-ispconfig-server-recommended).
-The defaults pin **REST v1.4.4** and **hosting v1.3.2**. The API runs as the dedicated `ispconfig-rest` account,
+The defaults pin **REST v1.4.5** and **hosting v1.3.2**. The API runs as the dedicated `ispconfig-rest` account,
 with `ispconfig-rest-web.service` and a private PHP-FPM socket; customer websites keep their existing web server.
-Installer and manager downloads for v1.4.4 are checked against their SHA-256 digests. Migration credentials are
+Installer and manager downloads for v1.4.5 are checked against their SHA-256 digests. Migration credentials are
 passed in a root-only password file, removed even when installation fails. The role checks `/up` over HTTPS
 with certificate verification before recording a successful deployment, including on unchanged runs. REST 1.4.2
 also corrects the ownership of sockets inherited during an FPM reload; REST 1.4.4 runs extension migrations (hosting 1.3+) with
@@ -319,7 +319,7 @@ Set them in `group_vars/all.yml`, or per group or host. They are listed with the
 | `ispconfig_roundcube` | `true` | Roundcube webmail on mail servers that also run a web server |
 | `ispconfig_set_hostname`, `ispconfig_manage_hosts_file` | `true` | set the host name, manage `/etc/hosts` |
 | `ispconfig_rest_install` | `true` | ispconfig-rest and the server tools on the panel |
-| `ispconfig_rest_version` | `v1.4.4` | managed REST release (1.4.2+), or main/develop |
+| `ispconfig_rest_version` | `v1.4.5` | managed REST release (1.4.2+), or main/develop |
 | `ispconfig_rest_user` | `ispconfig-rest` | dedicated API web/FPM and checkout account |
 | `ispconfig_rest_dir` | `/opt/ispconfig-rest` | installation path; must match an existing deployment |
 | `ispconfig_rest_reconfigure` | `false` | one-off installer and worker refresh, including moving branches |
