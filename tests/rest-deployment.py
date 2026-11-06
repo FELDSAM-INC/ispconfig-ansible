@@ -173,7 +173,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue(Path('/etc/ispconfig-rest/ansible-deployment.json').exists())
 
     def test_old_release_and_shared_runtime_are_rejected(self):
-        for values in [{'ispconfig_rest_version':'v1.4.0'},{'ispconfig_rest_version':'v1.4.1'},{'ispconfig_rest_extensions':['hosting@v1.1.3']},{'ispconfig_rest_user':'www-data'}]:
+        for values in [{'ispconfig_rest_version':'v1.4.0'},{'ispconfig_rest_version':'v1.4.1'},{'ispconfig_rest_extensions':['hosting@v1.1.3']},{'ispconfig_rest_user':'www-data'},
+                       {'ispconfig_rest_version':'v1.4.3','ispconfig_rest_extensions':['hosting@v1.3.0']}]:
             with self.subTest(values=values):self.run_play(values,success=False)
         self.assertFalse(CALLS.exists())
 
@@ -181,10 +182,10 @@ class DeploymentTests(unittest.TestCase):
         self.run_play()
         marker=Path('/etc/ispconfig-rest/ansible-deployment.json')
         previous=marker.read_text()
-        self.run_play({'ispconfig_rest_version':'v1.4.4','rest_test_fail':'yes'},success=False)
+        self.run_play({'ispconfig_rest_version':'v1.4.5','rest_test_fail':'yes'},success=False)
         self.assertEqual(marker.read_text(),previous)
-        self.run_play({'ispconfig_rest_version':'v1.4.4'})
-        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.4')
+        self.run_play({'ispconfig_rest_version':'v1.4.5'})
+        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.5')
 
     def test_active_service_with_failed_http_does_not_mark_deployment_successful(self):
         Path('/tmp/rest-fixtures/http-failure').touch()
