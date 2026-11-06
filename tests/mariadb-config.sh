@@ -13,7 +13,8 @@ declare -A VERSION
 for image in ${IMAGES:-debian:12 debian:13 ubuntu:22.04 ubuntu:24.04}; do
     name="ispcp-mariadb-config-${image/:/-}"
     CONTAINERS+=("$name")
-    docker run -d --name "$name" "$image" sleep infinity >/dev/null
+    # The role's LimitNOFILE for the mariadb service; with less MariaDB shrinks table_open_cache and warns.
+    docker run -d --ulimit nofile=131072:131072 --name "$name" "$image" sleep infinity >/dev/null
     docker exec -e DEBIAN_FRONTEND=noninteractive "$name" sh -ec \
         'apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends mariadb-server >/dev/null'
     VERSION[$image]=$(docker exec "$name" mariadbd --version | sed -n 's/.*Ver \([0-9]*\.[0-9]*\).*/\1/p')
@@ -44,8 +45,8 @@ for image in "${!VERSION[@]}"; do
         for i in $(seq 1 60); do mariadb-admin ping --silent 2>/dev/null && exit 0; sleep 1; done
         cat /tmp/mariadb.log; exit 1'
     query() { docker exec "$name" mariadb --batch --skip-column-names -e "$1"; }
-    got=$(query "SELECT @@innodb_buffer_pool_size DIV 1048576, @@innodb_log_file_size DIV 1048576, @@max_connections, @@collation_server, CONCAT('[', @@sql_mode, ']'), @@tx_isolation, @@innodb_flush_log_at_trx_commit")
-    expected=$'4352\t1088\t300\tutf8mb4_unicode_ci\t[]\tREAD-COMMITTED\t2'
+    got=$(query "SELECT @@innodb_buffer_pool_size DIV 1048576, @@innodb_log_file_size DIV 1048576, @@max_connections, @@collation_server, CONCAT('[', @@sql_mode, ']'), @@tx_isolation, @@innodb_flush_log_at_trx_commit, @@table_open_cache")
+    expected=$'4352\t1088\t300\tutf8mb4_unicode_ci\t[]\tREAD-COMMITTED\t2\t4096'
     [ "$got" = "$expected" ] || { echo "FAIL $image (MariaDB ${VERSION[$image]}): $got" >&2; exit 1; }
     # ISPConfig creates databases with DEFAULT CHARACTER SET of the chosen charset, or none (server default).
     query "CREATE DATABASE c_mb4 DEFAULT CHARACTER SET utf8mb4; CREATE DATABASE c_default; CREATE DATABASE c_utf8 DEFAULT CHARACTER SET utf8; CREATE TABLE c_mb4.t (v VARCHAR(10));"

@@ -237,7 +237,8 @@ docker cp ispcp-ansible-pebble:/test/certs/pebble.minica.pem - | docker exec -i 
 # subjectAltName, which Python's TLS stack rejects; give the panel one with it, as Let's Encrypt would.
 on panel sh -c 'cd /usr/local/ispconfig/interface/ssl && openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj /CN=panel.ispcp.test \
     -addext subjectAltName=DNS:panel.ispcp.test -keyout ispserver.key -out ispserver.crt 2>/dev/null && cat ispserver.key ispserver.crt > ispserver.pem \
-    && systemctl reload nginx'
+    && systemctl reload nginx && systemctl reload-or-restart ispconfig-rest-web.service'
+# ispconfig-rest 1.4+ serves its port from its own isolated web service, which reads the certificate on (re)load.
 on panel cat /usr/local/ispconfig/interface/ssl/ispserver.crt | docker exec -i ispcp-ansible-acme sh -c 'cat > /tmp/panel.pem'
 acme sh -c 'mv /tmp/pebble.minica.pem /tmp/pebble.pem && cat /tmp/pebble.pem /tmp/panel.pem > /tmp/both.pem
     cp -r /acme-dns/certbot /tmp/plugin && pip install --quiet --root-user-action=ignore --disable-pip-version-check --no-deps /tmp/plugin

@@ -16,8 +16,29 @@
     validate: mariadbd --defaults-file=%s --help --verbose
   register: ispconfig_db_mariadb_config
 
+- name: Directory of the mariadb service's drop-ins
+  ansible.builtin.file:
+    path: /etc/systemd/system/mariadb.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Open-files limit of MariaDB for its table cache
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/mariadb.service.d/90-ispconfig-db.conf
+    content: |
+      # Managed by Ansible (ispconfig_db role): room for table_open_cache in 91-ispconfig-db.cnf
+      [Service]
+      LimitNOFILE={{ ispconfig_db_open_files_limit }}
+    owner: root
+    group: root
+    mode: "0644"
+  register: ispconfig_db_mariadb_limits
+
 - name: Restart MariaDB with the new settings
   ansible.builtin.systemd_service:
     name: mariadb
     state: restarted
-  when: ispconfig_db_mariadb_config is changed
+    daemon_reload: "{{ ispconfig_db_mariadb_limits is changed }}"
+  when: ispconfig_db_mariadb_config is changed or ispconfig_db_mariadb_limits is changed

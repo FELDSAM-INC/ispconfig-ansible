@@ -245,7 +245,7 @@ Database servers get sized MariaDB settings for customer databases in
 `/etc/mysql/mariadb.conf.d/91-ispconfig-db.cnf` ([`ispconfig_db`](roles/ispconfig_db/defaults/main.yml)). Memory
 follows the server's RAM: the InnoDB buffer pool takes 60 % (`ispconfig_db_buffer_pool_ratio`), the redo log a quarter
 of the pool (at most 2 GB); 7.25 GB RAM gives a 4352 MB pool and a 1088 MB redo log. Further defaults: 300
-connections, utf8mb4 with `utf8mb4_unicode_ci`, the permissive SQL mode of MySQL 5.x (empty `sql_mode`, for older
+connections, a 4096-table cache (the mariadb service gets `LimitNOFILE=131072` for it), utf8mb4 with `utf8mb4_unicode_ci`, the permissive SQL mode of MySQL 5.x (empty `sql_mode`, for older
 applications), `READ-COMMITTED`, `innodb_flush_log_at_trx_commit = 2` (up to a second of transactions lost on an OS
 crash or power loss), the performance schema, and a prepared but disabled slow query log.
 

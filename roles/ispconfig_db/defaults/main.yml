@@ -4,6 +4,9 @@
 # A changed file restarts MariaDB: open connections drop for a few seconds.
 ispconfig_db_buffer_pool_ratio: 0.6
 ispconfig_db_max_connections: 300
+# Open files of the mariadb service (systemd drop-in). MariaDB wants about 16 per table_open_cache entry (8 cache
+# instances, data and index file) plus one per connection; the unit's default 32768 would shrink the table cache.
+ispconfig_db_open_files_limit: 131072
 # Server defaults for databases created without a character set ("server default" in the panel). On MariaDB 11.2+
 # (Debian 13) utf8mb4/utf8 databases get these collations too, instead of 11.2's uca1400 ones that mix badly with
 # migrated tables; older MariaDB gives a database created with an explicit character set its general_ci collation.
