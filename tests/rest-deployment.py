@@ -181,10 +181,10 @@ class DeploymentTests(unittest.TestCase):
         self.run_play()
         marker=Path('/etc/ispconfig-rest/ansible-deployment.json')
         previous=marker.read_text()
-        self.run_play({'ispconfig_rest_version':'v1.4.3','rest_test_fail':'yes'},success=False)
+        self.run_play({'ispconfig_rest_version':'v1.4.4','rest_test_fail':'yes'},success=False)
         self.assertEqual(marker.read_text(),previous)
-        self.run_play({'ispconfig_rest_version':'v1.4.3'})
-        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.3')
+        self.run_play({'ispconfig_rest_version':'v1.4.4'})
+        self.assertEqual(json.loads(marker.read_text())['version'],'v1.4.4')
 
     def test_active_service_with_failed_http_does_not_mark_deployment_successful(self):
         Path('/tmp/rest-fixtures/http-failure').touch()
