@@ -1,0 +1,56 @@
+{% set ram = ansible_memtotal_mb | int %}
+{% set pool = [((ram * (ispconfig_db_buffer_pool_ratio | float)) / 128) | int * 128, 128] | max %}
+{% set redo = [[(pool / 4) | int, 2048] | min, 128] | max %}
+{% set tmp = 128 if ram >= 16384 else (64 if ram >= 4096 else 32) %}
+{% set settings = {
+    'skip-name-resolve': ispconfig_db_skip_name_resolve | bool,
+    'performance_schema': 'ON' if ispconfig_db_performance_schema | bool else 'OFF',
+    'character-set-server': ispconfig_db_character_set,
+    'collation-server': ispconfig_db_collation,
+    'sql_mode': '"' ~ ispconfig_db_sql_mode ~ '"',
+    'transaction-isolation': 'READ-COMMITTED',
+    'max_connections': ispconfig_db_max_connections,
+    'back_log': ispconfig_db_max_connections,
+    'max_connect_errors': 1000,
+    'wait_timeout': 120,
+    'interactive_timeout': 120,
+    'max_allowed_packet': '64M',
+    'thread_cache_size': 100,
+    'sort_buffer_size': '2M',
+    'read_buffer_size': '512K',
+    'read_rnd_buffer_size': '2M',
+    'join_buffer_size': '2M',
+    'tmp_table_size': tmp ~ 'M',
+    'max_heap_table_size': tmp ~ 'M',
+    'table_open_cache': 8192,
+    'table_definition_cache': 4096,
+    'key_buffer_size': '32M',
+    'myisam_sort_buffer_size': '128M',
+    'concurrent_insert': 2,
+    'bulk_insert_buffer_size': '16M',
+    'innodb_buffer_pool_size': pool ~ 'M',
+    'innodb_log_file_size': redo ~ 'M',
+    'innodb_log_buffer_size': '16M',
+    'innodb_flush_log_at_trx_commit': ispconfig_db_innodb_flush_log_at_trx_commit,
+    'innodb_io_capacity': ispconfig_db_innodb_io_capacity,
+    'innodb_io_capacity_max': (ispconfig_db_innodb_io_capacity | int) * 2,
+    'innodb_lock_wait_timeout': 60,
+    'slow_query_log': 0,
+    'slow_query_log_file': '/var/log/mysql/mariadb-slow.log',
+    'long_query_time': 0.5,
+    'log_queries_not_using_indexes': 1,
+} %}
+{% if ispconfig_mariadb_version is version('11.2', '>=') %}
+{%   set _ = settings.update({'character_set_collations': ispconfig_db_character_set_collations}) %}
+{% endif %}
+{% set settings = settings | combine(ispconfig_db_mariadb_settings) %}
+# Managed by Ansible (ispconfig_db role): customer databases on MariaDB {{ ispconfig_mariadb_version }},
+# sized for {{ ram }} MB RAM (InnoDB buffer pool {{ ispconfig_db_buffer_pool_ratio }} of it).
+[mysqld]
+{% for name, value in settings.items() %}
+{%   if value is sameas true %}
+{{ name }}
+{%   elif value is not sameas false %}
+{{ name }} = {{ value }}
+{%   endif %}
+{% endfor %}

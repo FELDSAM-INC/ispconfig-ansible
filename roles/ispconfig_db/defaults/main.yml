@@ -1,0 +1,24 @@
+# MariaDB settings for customer databases, written to /etc/mysql/mariadb.conf.d/91-ispconfig-db.cnf (read after the
+# autoinstaller's 50-server.cnf and the bind address in 90-ispconfig-ansible.cnf). Memory sizes follow the server's RAM:
+# the InnoDB buffer pool takes this share of it, the redo log a quarter of the pool (at most 2 GB).
+# A changed file restarts MariaDB: open connections drop for a few seconds.
+ispconfig_db_buffer_pool_ratio: 0.6
+ispconfig_db_max_connections: 300
+# Server defaults for databases created without a character set ("server default" in the panel). On MariaDB 11.2+
+# (Debian 13) utf8mb4/utf8 databases get these collations too, instead of 11.2's uca1400 ones that mix badly with
+# migrated tables; older MariaDB gives a database created with an explicit character set its general_ci collation.
+ispconfig_db_character_set: utf8mb4
+ispconfig_db_collation: utf8mb4_unicode_ci
+ispconfig_db_character_set_collations: utf8mb3=utf8mb3_unicode_ci,utf8mb4=utf8mb4_unicode_ci
+# Empty: the permissive mode of MySQL 5.x that older applications rely on (MariaDB's default is strict).
+ispconfig_db_sql_mode: ""
+# 2: the redo log is written at each commit but flushed to disk once per second; an OS crash or power loss can lose
+# up to a second of transactions, a MariaDB crash does not. 1 is fully durable and slower.
+ispconfig_db_innodb_flush_log_at_trx_commit: 2
+# I/O operations per second InnoDB plans background flushing with (SSD; about 200 for spinning disks).
+ispconfig_db_innodb_io_capacity: 2000
+ispconfig_db_performance_schema: true
+# Off by default: customers can allow remote access by host name (remote_ips), which skip-name-resolve stops matching.
+ispconfig_db_skip_name_resolve: false
+# Further [mysqld] settings, or replacements of the ones above: {name: value}; a value of true writes the bare name.
+ispconfig_db_mariadb_settings: {}

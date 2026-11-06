@@ -239,6 +239,29 @@ Databases of websites on another server work without manual steps:
 - Private addresses are not offered to customers: ispconfig-rest leaves them out of the addresses it reports for DNS
   and connection details. Websites listen on `*` by default; do not assign private addresses to websites or DNS records.
 
+### MariaDB settings of database servers
+
+Database servers get sized MariaDB settings for customer databases in
+`/etc/mysql/mariadb.conf.d/91-ispconfig-db.cnf` ([`ispconfig_db`](roles/ispconfig_db/defaults/main.yml)). Memory
+follows the server's RAM: the InnoDB buffer pool takes 60 % (`ispconfig_db_buffer_pool_ratio`), the redo log a quarter
+of the pool (at most 2 GB); 7.25 GB RAM gives a 4352 MB pool and a 1088 MB redo log. Further defaults: 300
+connections, utf8mb4 with `utf8mb4_unicode_ci`, the permissive SQL mode of MySQL 5.x (empty `sql_mode`, for older
+applications), `READ-COMMITTED`, `innodb_flush_log_at_trx_commit = 2` (up to a second of transactions lost on an OS
+crash or power loss), the performance schema, and a prepared but disabled slow query log.
+
+- The collation applies to databases created with the server default character set; on MariaDB 11.2+ (Debian 13)
+  also to utf8mb4 and utf8 databases, which would otherwise get 11.2's `uca1400` collations. ISPConfig itself has no
+  collation setting; customers can change their database's default with `ALTER DATABASE ... COLLATE ...` (its user
+  has all privileges on it), e.g. in phpMyAdmin under Operations.
+- `skip-name-resolve` stays off (`ispconfig_db_skip_name_resolve`): customers may allow remote access by host name.
+- `ispconfig_db_mariadb_settings` adds or replaces `[mysqld]` settings. mariadbd checks the file before it is
+  installed, so an option the installed MariaDB does not know (e.g. MySQL's `mysql_native_password`) fails the run
+  instead of MariaDB's start. Options removed from MariaDB, such as `innodb_log_files_in_group` and
+  `innodb_buffer_pool_instances`, only log a warning and are not set; `innodb_data_file_path` must not be changed
+  on an existing server.
+- A changed file restarts MariaDB, so connections drop for a few seconds. On a database server in production, run the
+  playbook at a quiet time.
+
 ## Firewall
 
 With `ispconfig_firewall` (default `true`) the autoinstaller installs ufw, and the panel writes each server's firewall
@@ -269,8 +292,8 @@ of a server resets ufw, so rules added outside ISPConfig are lost; put them in `
 ## Variables
 
 Set them in `group_vars/all.yml`, or per group or host. They are listed with their defaults in
-[`ispconfig_server`](roles/ispconfig_server/defaults/main.yml), [`ispconfig_web`](roles/ispconfig_web/defaults/main.yml)
-and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
+[`ispconfig_server`](roles/ispconfig_server/defaults/main.yml), [`ispconfig_web`](roles/ispconfig_web/defaults/main.yml),
+[`ispconfig_db`](roles/ispconfig_db/defaults/main.yml) and [`ispconfig_panel`](roles/ispconfig_panel/defaults/main.yml).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -324,6 +347,7 @@ Install it from the REST panel with `sudo ispconfig-rest server-tools install --
 php tests/autoinstall-values.php   # the autoinstaller values hook (files/autoinstall.php)
 bash tests/rest-deployment.sh      # disposable container: install, legacy identity migration, repeat and failure cleanup
 bash tests/php53-security.sh       # build patched CLI/FPM, then check OOM, multipart parsing and worker reuse
+bash tests/mariadb-config.sh       # database server MariaDB settings on every supported system's MariaDB
 bash tests/e2e/run.sh              # panel, web, database and DNS servers in systemd containers (Docker)
 ```
 

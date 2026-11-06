@@ -3,3 +3,21 @@
 - name: ISPConfig
   ansible.builtin.include_role:
     name: ispconfig_server
+
+# Sized from the server's RAM, see defaults/main.yml. mariadbd checks every option before the file is installed, so
+# a setting the installed MariaDB does not know never keeps it from starting.
+- name: MariaDB settings for customer databases
+  ansible.builtin.template:
+    src: mariadb.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/91-ispconfig-db.cnf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: mariadbd --defaults-file=%s --help --verbose
+  register: ispconfig_db_mariadb_config
+
+- name: Restart MariaDB with the new settings
+  ansible.builtin.systemd_service:
+    name: mariadb
+    state: restarted
+  when: ispconfig_db_mariadb_config is changed

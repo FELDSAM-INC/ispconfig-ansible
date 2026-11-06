@@ -26,6 +26,13 @@ jobs:
       - name: REST release upgrade and isolation migration
         run: bash tests/rest-deployment.sh
 
+  mariadb-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB settings of database servers on Debian 12/13 and Ubuntu 22.04/24.04
+        run: bash tests/mariadb-config.sh
+
   php53-security:
     runs-on: ubuntu-latest
     steps:
