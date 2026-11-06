@@ -6,6 +6,12 @@ ispconfig_groups:
   ispconfig_dns: dns
   ispconfig_mail: mail
 
+# Every ISPConfig server of the inventory, whether or not this run (--limit) includes it.
+ispconfig_all_servers: "{{ ispconfig_groups.keys() | select('in', groups) | map('extract', groups) | flatten | unique | list }}"
+# Servers whose checked name and address this run does not have: outside --limit, unreachable or failed.
+ispconfig_hosts_unknown: "{{ ispconfig_all_servers | reject('in', ansible_play_hosts) | list }}"
+ispconfig_hosts_file: /etc/hosts
+
 # PHP versions the autoinstaller installs from the sury repository, and those the ispconfig_web role builds.
 ispconfig_sury_php_versions: ["5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
 ispconfig_built_php_versions: ["5.3"]

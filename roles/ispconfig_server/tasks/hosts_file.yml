@@ -1,0 +1,25 @@
+# Every ISPConfig server lists all servers of the inventory. A run limited to some of them (--limit) or one in which a
+# server is unreachable does not know the addresses of the others, so the list is then kept as it is: writing only the
+# servers of this run would drop the panel and the other servers, and this server could no longer reach them.
+- name: Remove the loopback entry of the host name
+  ansible.builtin.lineinfile:
+    path: "{{ ispconfig_hosts_file }}"
+    regexp: '^127\.0\.1\.1\s'
+    state: absent
+
+- name: List the ISPConfig servers in /etc/hosts
+  ansible.builtin.blockinfile:
+    path: "{{ ispconfig_hosts_file }}"
+    marker: "# {mark} ISPConfig servers (Ansible)"
+    block: |
+      {% for host in ispconfig_all_servers | sort %}
+      {{ hostvars[host].ispconfig_ip }} {{ hostvars[host].ispconfig_fqdn }} {{ hostvars[host].ispconfig_fqdn.split('.')[0] }}
+      {% endfor %}
+  when: ispconfig_hosts_unknown | length == 0
+
+- name: Keep the server list of /etc/hosts
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /etc/hosts keeps its ISPConfig server list: this run does not know the addresses of
+      {{ ispconfig_hosts_unknown | join(', ') }} (--limit or unreachable). Run without --limit to update the list.
+  when: ispconfig_hosts_unknown | length > 0

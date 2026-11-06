@@ -38,7 +38,7 @@
       - ispconfig_tools_php_version is version('8.3', '>=') and ispconfig_tools_php_version in ispconfig_sury_php_versions
       - ispconfig_ftp_passive_ports == '' or ispconfig_ftp_passive_ports is match('^[1-9][0-9]*-[1-9][0-9]*$')
       - "'panel' not in ispconfig_services or ispconfig_admin_password | length >= 8"
-      - ispconfig_master_db_admin_password | length >= 16 or groups['ispconfig_panel'] | length == ispconfig_all_servers | length
+      - ispconfig_master_db_admin_password | length >= 16 or groups['ispconfig_panel'] | length == ispconfig_group_members | length
       - ispconfig_master_db_admin_user is match('^[A-Za-z0-9_]{1,32}$')
     fail_msg: >-
       Exactly one host in ispconfig_panel; every server an FQDN as inventory name (or ispconfig_hostname) and an
@@ -47,7 +47,7 @@
       {{ (ispconfig_built_php_versions + ispconfig_sury_php_versions) | join(', ') }}.
     quiet: true
   vars:
-    ispconfig_all_servers: "{{ groups['ispconfig_panel'] | default([]) + groups['ispconfig_web'] | default([]) + groups['ispconfig_db'] | default([]) + groups['ispconfig_dns'] | default([]) + groups['ispconfig_mail'] | default([]) }}"
+    ispconfig_group_members: "{{ groups['ispconfig_panel'] | default([]) + groups['ispconfig_web'] | default([]) + groups['ispconfig_db'] | default([]) + groups['ispconfig_dns'] | default([]) + groups['ispconfig_mail'] | default([]) }}"
 
 # The panel's MariaDB listens on ispconfig_address: on a public address the firewall alone keeps it private.
 - name: Warn when the panel's database would listen on a public address
@@ -66,21 +66,8 @@
 
 # `hostname -f` must give the FQDN, and every server must resolve the others to the addresses they connect from:
 # the panel's MariaDB grants the servers' ISPConfig accounts by name and address.
-- name: Remove the loopback entry of the host name
-  ansible.builtin.lineinfile:
-    path: /etc/hosts
-    regexp: '^127\.0\.1\.1\s'
-    state: absent
-  when: ispconfig_manage_hosts_file | bool
-
-- name: List the ISPConfig servers in /etc/hosts
-  ansible.builtin.blockinfile:
-    path: /etc/hosts
-    marker: "# {mark} ISPConfig servers (Ansible)"
-    block: |
-      {% for host in ansible_play_hosts_all | sort if hostvars[host].ispconfig_fqdn is defined %}
-      {{ hostvars[host].ispconfig_ip }} {{ hostvars[host].ispconfig_fqdn }} {{ hostvars[host].ispconfig_fqdn.split('.')[0] }}
-      {% endfor %}
+- name: Server names and addresses in /etc/hosts
+  ansible.builtin.import_tasks: hosts_file.yml
   when: ispconfig_manage_hosts_file | bool
 
 - name: Check the FQDN

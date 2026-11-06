@@ -12,6 +12,14 @@
           + (['dns-catalog'] if ispconfig_rest_dns_catalog | bool and groups['ispconfig_dns'] | default([]) | length > 0 else []))
          | unique | list }}
 
+- name: Check that this run includes the servers
+  ansible.builtin.assert:
+    that: ispconfig_tools_servers | map('extract', hostvars) | selectattr('ispconfig_fqdn', 'undefined') | list | length == 0
+    fail_msg: >-
+      The server tools need the names and addresses of all servers; run them without --limit
+      (missing: {{ ispconfig_tools_servers | map('extract', hostvars) | selectattr('ispconfig_fqdn', 'undefined') | map(attribute='inventory_hostname') | join(', ') }}).
+    quiet: true
+
 - name: Check the file manager settings
   ansible.builtin.assert:
     that: not ispconfig_rest_file_manager_key or ispconfig_rest_whmcs_ip

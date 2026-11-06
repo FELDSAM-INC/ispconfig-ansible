@@ -61,7 +61,9 @@ defaults to the server's default IPv4 address. The playbook runs in this order:
 
 1. **Prepare**: checks the inventory and variables, sets the host name and lists all ISPConfig servers in
    `/etc/hosts` on each of them. ISPConfig grants the servers' database accounts on the panel by name and address,
-   so the names must resolve to these addresses everywhere.
+   so the names must resolve to these addresses everywhere. A run limited with `--limit`, or one in which a server
+   is unreachable, keeps the existing list and warns; run without `--limit` after adding a server or changing an
+   address. The server tools step also needs every server and stops early in a limited run.
 2. **Panel**: autoinstaller as a standalone master, then ispconfig-rest.
 3. **Servers**: all database, web, DNS and mail servers in parallel (`ispconfig_serial: 1` installs them one by one).
    Each server joins the panel and is then visible in the ISPConfig interface.
@@ -348,6 +350,7 @@ php tests/autoinstall-values.php   # the autoinstaller values hook (files/autoin
 bash tests/rest-deployment.sh      # disposable container: install, legacy identity migration, repeat and failure cleanup
 bash tests/php53-security.sh       # build patched CLI/FPM, then check OOM, multipart parsing and worker reuse
 bash tests/mariadb-config.sh       # database server MariaDB settings on every supported system's MariaDB
+bash tests/hosts-file.sh           # /etc/hosts server list: full runs, --limit and failed servers keep every server
 bash tests/e2e/run.sh              # panel, web, database and DNS servers in systemd containers (Docker)
 ```
 

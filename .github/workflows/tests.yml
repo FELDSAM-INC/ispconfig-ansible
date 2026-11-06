@@ -26,6 +26,13 @@ jobs:
       - name: REST release upgrade and isolation migration
         run: bash tests/rest-deployment.sh
 
+  hosts-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Server list in /etc/hosts with --limit and failed servers
+        run: bash tests/hosts-file.sh
+
   mariadb-config:
     runs-on: ubuntu-latest
     steps:

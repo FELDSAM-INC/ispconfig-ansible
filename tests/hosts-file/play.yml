@@ -1,0 +1,26 @@
+# The /etc/hosts tasks of the ispconfig_server role as site.yml runs them (include_role with tags: always), on three
+# local hosts that each write their own copy of the file. Facts as prepare.yml sets them; hosts_test_fail makes one
+# server fail before the list, as an unreachable one would.
+- name: Server list in /etc/hosts
+  hosts: ispconfig_panel:ispconfig_web:ispconfig_db
+  gather_facts: false
+  tasks:
+    - name: A server that cannot be reached
+      ansible.builtin.fail:
+        msg: unreachable
+      when: inventory_hostname == hosts_test_fail | default('')
+      tags: always
+
+    - name: Facts of prepare.yml
+      ansible.builtin.set_fact:
+        ispconfig_fqdn: "{{ inventory_hostname }}"
+        ispconfig_ip: "{{ (hosts_test_addresses | default({}))[inventory_hostname] | default(ispconfig_address) }}"
+      tags: always
+
+    - name: The role's tasks
+      ansible.builtin.include_role:
+        name: ispconfig_server
+        tasks_from: hosts_file
+        apply:
+          tags: always
+      tags: always
