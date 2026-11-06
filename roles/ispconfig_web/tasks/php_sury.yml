@@ -1,14 +1,17 @@
 # The autoinstaller installs and registers the PHP versions of the first run; versions added to
-# ispconfig_php_versions later are installed and registered here, with the autoinstaller's packages.
+# ispconfig_php_versions later are installed and registered here, with the autoinstaller's packages plus bcmath
+# (not in the autoinstaller's list). Every run installs missing modules on all versions, existing servers included.
+# openssl is part of every packaged PHP; PHP 5.3 is built with openssl, soap and bcmath (build-php53.sh).
 - name: Install the PHP versions from the sury repository
   ansible.builtin.apt:
     name: "{{ ispconfig_php_packages }}"
+  register: ispconfig_php_sury_install
   vars:
     ispconfig_php_packages: >-
       {%- set packages = [] -%}
       {%- for version in ispconfig_php_websites -%}
       {%-   set _ = packages.append('php' ~ version) -%}
-      {%-   for module in ['common', 'gd', 'mysql', 'imap', 'cli', 'mcrypt', 'curl', 'intl', 'pspell', 'recode', 'sqlite3', 'tidy', 'xmlrpc', 'xsl', 'zip', 'mbstring', 'soap', 'opcache', 'cgi', 'fpm'] -%}
+      {%-   for module in ['common', 'gd', 'mysql', 'imap', 'cli', 'mcrypt', 'curl', 'intl', 'pspell', 'recode', 'sqlite3', 'tidy', 'xmlrpc', 'xsl', 'zip', 'mbstring', 'soap', 'bcmath', 'opcache', 'cgi', 'fpm'] -%}
       {%-     if not (module == 'mcrypt' and version is version('7.2', '>=')
                      or module == 'recode' and version is version('7.4', '>=')
                      or module == 'xmlrpc' and version is version('8.0', '>=')
@@ -25,6 +28,17 @@
     enabled: true
     state: started
   loop: "{{ ispconfig_php_websites }}"
+
+# A module added to a running version loads only when its PHP-FPM restarts. A restart (not a reload) also restarts
+# the per-website masters of the php-limits server tool, which are PartOf the version's service.
+- name: Restart PHP-FPM of the versions that received new modules
+  ansible.builtin.systemd_service:
+    name: php{{ item }}-fpm
+    state: restarted
+  loop: "{{ ispconfig_php_websites }}"
+  when:
+    - ispconfig_php_sury_install is changed
+    - ('Setting up php' ~ item ~ '-') in (ispconfig_php_sury_install.stdout | default(''))
 
 - name: Register the PHP versions in ISPConfig
   ansible.builtin.include_tasks: server_php.yml

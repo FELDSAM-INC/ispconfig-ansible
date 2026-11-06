@@ -110,19 +110,20 @@ group=$(sql "SELECT groupid FROM sys_group WHERE client_id = $client")
 on panel ispconfig-rest extension:list | grep -E '^\| hosting +\| [0-9.]+ +\| yes' >/dev/null || fail "hosting extension not loaded"
 api "https://127.0.0.1:8090/api/v1/usage/resources?client_id=$client" >/dev/null || fail "hosting endpoint"
 on panel curl -fsSk https://127.0.0.1:8090/api/spec | grep -qF '/sites/web-domains/{id}/waf' || fail "hosting contract"
-for version in 5.3 5.6; do
+for version in 5.3 5.6 8.3; do
     domain="php${version/./}.ispcp.test"
     [ -z "$(sql "SELECT domain_id FROM web_domain WHERE domain = '$domain'")" ] || continue
     php_id=$(sql "SELECT server_php_id FROM server_php WHERE server_id = $web AND name = 'PHP $version'")
     api -X POST https://127.0.0.1:8090/api/v1/sites/web-domains -d "{\"server_id\":$web,\"domain\":\"$domain\",\"sys_groupid\":$group,\"php\":\"php-fpm\",\"server_php_id\":$php_id}" >/dev/null
 done
-for version in 5.3 5.6; do
+for version in 5.3 5.6 8.3; do
     domain="php${version/./}.ispcp.test"
     root=$(sql "SELECT document_root FROM web_domain WHERE domain = '$domain'")
     user=$(sql "SELECT system_user FROM web_domain WHERE domain = '$domain'")
     for _ in $(seq 1 30); do on web1 test -d "$root/web" && break; sleep 10; done
     on web1 test -d "$root/web" || fail "ISPConfig did not create $domain"
-    on web1 sh -c "printf '%s' '<?php echo PHP_VERSION;' > $root/web/version.php && chown $user: $root/web/version.php"
+    # Applications commonly require these extensions; checked through the website's own PHP-FPM.
+    on web1 sh -c "printf '%s' '<?php echo PHP_VERSION; foreach (array(\"openssl\", \"soap\", \"bcmath\") as \$e) { if (!extension_loaded(\$e)) { echo \" missing-\", \$e; } }' > $root/web/version.php && chown $user: $root/web/version.php"
     served=""
     for _ in $(seq 1 30); do
         served=$(on web1 curl -fs -H "Host: $domain" http://127.0.0.1/version.php || true)
@@ -131,6 +132,7 @@ for version in 5.3 5.6; do
     done
     echo "$domain: PHP $served"
     [[ $served == "$version".* ]] || fail "$domain serves PHP '$served'"
+    [[ $served != *missing-* ]] || fail "$domain lacks PHP extensions: $served"
 done
 on web1 sh -c 'ls /etc/php/5.3/fpm/pool.d/ | grep -q "^web[0-9]*\.conf$"' || fail "no ISPConfig pool for PHP 5.3"
 
