@@ -18,7 +18,7 @@ ispconfig_ssl_cert:
 
 # ispconfig-rest on the panel and its server tools
 ispconfig_rest_version: v1.4.5
-ispconfig_rest_extensions: [hosting@v1.9.0]
+ispconfig_rest_extensions: [hosting@v1.10.0]
 ispconfig_rest_user: ispconfig-rest
 ispconfig_rest_server_tools: [database, web-logs, waf]
 ispconfig_rest_dns_catalog: true
