@@ -1,7 +1,7 @@
 # ispconfig-rest on the panel: https://<panel>:8090, installed with its install.sh from GitHub.
 ispconfig_rest_install: true
 # Changing the selected release/configuration reapplies the installer, including existing installations.
-ispconfig_rest_version: v1.4.5
+ispconfig_rest_version: v1.4.6
 ispconfig_rest_repository: FELDSAM-INC/ispconfig-rest
 ispconfig_rest_user: ispconfig-rest
 ispconfig_rest_dir: /opt/ispconfig-rest
@@ -10,7 +10,7 @@ ispconfig_rest_reconfigure: false
 ispconfig_rest_port: 8090
 # Extensions of ispconfig-rest, each NAME or NAME@REF (a branch or a vX.Y.Z release; default main). hosting adds the
 # hosting features and the server tools below (https://github.com/FELDSAM-INC/ispconfig-rest-hosting).
-ispconfig_rest_extensions: [hosting@v1.10.0]
+ispconfig_rest_extensions: [hosting@v1.11.0]
 # Public URL of the API (default https://<panel FQDN>:<port>).
 ispconfig_rest_url: ""
 

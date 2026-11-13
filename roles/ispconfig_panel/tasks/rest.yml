@@ -77,7 +77,7 @@
     group: root
     mode: '0700'
     force: true
-    checksum: "{{ 'sha256:8148e87a0f4b19a85762eca1831c5a28b8136ac53253fda53e16c024c3392d3f' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.5' else omit }}"
+    checksum: "{{ 'sha256:8148e87a0f4b19a85762eca1831c5a28b8136ac53253fda53e16c024c3392d3f' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.6' else omit }}"
   register: ispconfig_rest_download
 
 - name: Fingerprint the downloaded installer
@@ -144,7 +144,7 @@
         group: root
         mode: '0755'
         force: true
-        checksum: "{{ 'sha256:7bb682738e51a82ad8eed6a40987f950fb57caa482bba54ded6b538513a7afde' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.5' else omit }}"
+        checksum: "{{ 'sha256:7bb682738e51a82ad8eed6a40987f950fb57caa482bba54ded6b538513a7afde' if ispconfig_rest_repository == 'FELDSAM-INC/ispconfig-rest' and ispconfig_rest_version == 'v1.4.6' else omit }}"
       when: ispconfig_rest_installed.stat.exists
 
     # The installer verifies existing extension revisions before its privileged migrations. Bring each one to
